@@ -1,0 +1,44 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# Lambda
+**/function.zip
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# AWS
+.aws/
+
+# Claude
+.claude/
+.claude.json*
+.config/
+
+# Windows system files
+NTUSER.*
+ntuser.*
+AppData/
+Contacts/
+Downloads/
+Favorites/
+Links/
+Music/
+OneDrive/
+Saved Games/
+Searches/
+Videos/
+3D Objects/
+IntelGraphicsProfiles/
+.gitconfig
+.ssh/
+output.json
