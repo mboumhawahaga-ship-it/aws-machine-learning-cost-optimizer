@@ -43,6 +43,18 @@ On a sample account spending **$850/month** on SageMaker:
 
 **ROI:** Immediate cost reduction with minimal implementation effort
 
+## 💰 Simulation d'Impact Financier (Exemple)
+
+Voici une estimation des économies réalisables pour un client type utilisant des charges de travail ML intensives :
+
+| Levier d'Optimisation | Gain Estimé | Impact sur la Facture |
+| :--- | :--- | :--- |
+| **Instances Spot** | 60% à 90% | Réduction massive sur le Training |
+| **Right-sizing** | 20% à 40% | Ajustement des instances sous-utilisées |
+| **Nettoyage EBS** | 5% à 10% | Suppression des volumes isolés |
+
+> **Note :** Ces chiffres sont des estimations basées sur les meilleures pratiques AWS et les simulations effectuées par l'outil
+
 ## Architecture
 
 ```
