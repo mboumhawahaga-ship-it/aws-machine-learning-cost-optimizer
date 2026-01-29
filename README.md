@@ -1,39 +1,69 @@
-# 💰 AWS Machine Learning Cost Optimizer
+# AWS Machine Learning Cost Optimizer
 
-## 🎯 Elevating Business Value through Cloud Efficiency
+[![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/mboumhawahaga-ship-it/aws-machine-learning-cost-optimizer/blob/main/LICENSE)  
+[![GitHub stars](https://img.shields.io/github/stars/mboumhawahaga-ship-it/aws-machine-learning-cost-optimizer.svg)](https://github.com/mboumhawahaga-ship-it/aws-machine-learning-cost-optimizer/stargazers)
 
-In the world of Cloud Computing, **unoptimized ML infrastructure is a hidden leak in a company's budget**. As a Technical Customer Success Manager, I built this tool to bridge the gap between high-performance Machine Learning and financial sustainability.
+## Installation
 
-This Python-based tool analyzes AWS SageMaker workloads to provide **actionable cost-optimization recommendations**, helping organizations achieve more with less.
-
----
-
-## 🚀 Business Impact (Estimations)
-
-This tool isn't just about code; it's about **ROI**. Based on typical AWS Well-Architected reviews, here is the estimated impact of implementing the recommendations:
-
-| Optimization Lever | Estimated Savings | Business Logic |
-| :--- | :--- | :--- |
-| **Managed Spot Training** | 60% - 90% | Leverages spare AWS capacity for non-urgent training jobs. |
-| **Instance Right-sizing** | 20% - 45% | Identifies over-provisioned notebooks and endpoints. |
-| **Lifecycle Configurations** | 10% - 15% | Automatically shuts down idle resources after hours. |
-| **S3 Lifecycle Policies** | 5% - 10% | Moves old model artifacts to colder storage tiers. |
-
-> **Note:** These results are estimations based on AWS pricing models and simulated usage patterns.
-
----
-
-## 🛠️ Technical Implementation
-
-### How it works (The Compass)
-The script interacts with AWS APIs to audit your environment and compare current usage against cost-optimized alternatives.
-
-* **Core Engine:** Python 3.x
-* **AWS SDK:** Boto3 (Cost Explorer & SageMaker APIs)
-* **Strategy:** Well-Architected Framework - Cost Optimization Pillar
-
-### Quick Start (Manual)
-1. **Clone the ship:**
+1. Clone the repository:
    ```bash
-   git clone [https://github.com/mboumhawahaga-ship-it/aws-machine-learning-cost-optimizer.git](https://github.com/mboumhawahaga-ship-it/aws-machine-learning-cost-optimizer.git)
+   git clone https://github.com/mboumhawahaga-ship-it/aws-machine-learning-cost-optimizer.git
    cd aws-machine-learning-cost-optimizer
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+## Usage
+
+To start the application, run:
+```bash
+npm start
+```
+
+Refer to the documentation for more details on how to use the service and configure settings.
+
+## Architecture
+
+The AWS Machine Learning Cost Optimizer utilizes the following services:
+- AWS Lambda for serverless compute
+- Amazon S3 for storage
+- Amazon DynamoDB for fast data access
+- AWS SageMaker for machine learning models
+
+The architecture is designed to be scalable and cost-efficient.
+
+## Badges
+
+Feel free to add more badges relevant to the project, for example:
+- Build Status
+- Code Coverage
+- Dependencies
+
+## Troubleshooting
+
+- If you encounter issues during the installation or runtime:
+  - Ensure you have the correct version of Node.js installed.
+  - Check the AWS permissions for the IAM user you are using.
+  - Consult the logs in CloudWatch for detailed error messages.
+
+## Contributing
+
+Contributions are welcome! Please follow these steps:
+1. Fork the repository.
+2. Create a new branch:
+   ```bash
+   git checkout -b feature/YourFeature
+   ```
+3. Make your changes and commit them:
+   ```bash
+   git commit -m 'Add your feature'
+   ```
+4. Push to the branch:
+   ```bash
+   git push origin feature/YourFeature
+   ```
+5. Create a new Pull Request.
+
+Please ensure your code adheres to the project's coding standards before submitting. Thank you for contributing!  
