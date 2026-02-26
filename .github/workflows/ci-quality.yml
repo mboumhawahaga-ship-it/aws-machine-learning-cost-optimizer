@@ -1,0 +1,34 @@
+name: Quality Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install flake8
+
+      - name: Lint Python with Flake8
+        run: flake8 lambda/ --max-line-length=100
+
+      - name: Terraform Format Check
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.0.0
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive terraform/
