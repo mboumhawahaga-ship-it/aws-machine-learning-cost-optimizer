@@ -1,6 +1,6 @@
 # AWS Machine Learning Cost Optimizer
 
-![Build Badge](https://img.shields.io/badge/build-passing-brightgreen)
+![Quality & Security Check](https://github.com/mboumhawahaga-ship-it/Aws-tagging-gouvernance/actions/workflows/ci-quality.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Features
