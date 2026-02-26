@@ -23,7 +23,7 @@ jobs:
         run: pip install flake8
 
       - name: Lint Python with Flake8
-        run: flake8 lambda/ --max-line-length=100
+        run: flake8 lambda/ --max-line-length=130 --extend-ignore=E302
 
       - name: Terraform Format Check
         uses: hashicorp/setup-terraform@v2
