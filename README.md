@@ -1,5 +1,4 @@
 # AWS Machine Learning Cost Optimizer
-
 ![Quality & Security Check](https://github.com/mboumhawahaga-ship-it/Aws-tagging-gouvernance/actions/workflows/ci-quality.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
