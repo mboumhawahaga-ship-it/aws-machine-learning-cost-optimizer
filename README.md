@@ -1,5 +1,7 @@
 # AWS Machine Learning Cost Optimizer
+
 [![Quality Check](https://github.com/mboumhawahaga-ship-it/aws-machine-learning-cost-optimizer/actions/workflows/ci-quality.yml/badge.svg)](https://github.com/mboumhawahaga-ship-it/aws-machine-learning-cost-optimizer/actions/workflows/ci-quality.yml)
+
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ## Features
