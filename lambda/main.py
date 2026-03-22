@@ -4,19 +4,34 @@ import os
 from datetime import datetime, timedelta
 from decimal import Decimal
 
+# ---------------------------------------------------------------------------
+# MOCK DATA — used when MOCK_MODE=true (no real AWS account needed)
+# ---------------------------------------------------------------------------
+MOCK_COST = 850.00  # Simulated monthly SageMaker spend in USD
+
+def get_mock_cost_response():
+    """Returns a fake AWS Cost Explorer response for demo/testing purposes."""
+    print("[MOCK MODE] Simulating AWS Cost Explorer response...")
+    print(f"[MOCK MODE] Injecting ${MOCK_COST:.2f} monthly SageMaker spend")
+    return MOCK_COST
+
+
+# ---------------------------------------------------------------------------
+# MAIN HANDLER
+# ---------------------------------------------------------------------------
 def handler(event, context):
     """
-    Analyze AWS SageMaker costs and generate optimization recommendations
+    Analyze AWS SageMaker costs and generate optimization recommendations.
+    Set MOCK_MODE=true in environment variables to run without a real AWS account.
     """
 
     print("Starting ML Cost Analysis...")
 
-    # AWS Clients
-    ce_client = boto3.client('ce')
-    s3_client = boto3.client('s3')
+    # Check if mock mode is enabled
+    mock_mode = os.environ.get('MOCK_MODE', 'false').lower() == 'true'
 
     # Configuration
-    bucket_name = os.environ.get('REPORT_BUCKET')
+    bucket_name = os.environ.get('REPORT_BUCKET', 'mock-bucket')
     project_name = os.environ.get('PROJECT_NAME', 'ml-cost-optimizer')
 
     # Analysis period: last 30 days
@@ -24,48 +39,58 @@ def handler(event, context):
     start_date = end_date - timedelta(days=30)
 
     print(f"Analyzing period: {start_date} to {end_date}")
+    if mock_mode:
+        print("[MOCK MODE] Running in mock mode — no real AWS calls will be made")
 
     try:
-        # Get SageMaker costs
-        response = ce_client.get_cost_and_usage(
-            TimePeriod={
-                'Start': str(start_date),
-                'End': str(end_date)
-            },
-            Granularity='MONTHLY',
-            Filter={
-                'Dimensions': {
-                    'Key': 'SERVICE',
-                    'Values': ['Amazon SageMaker']
-                }
-            },
-            Metrics=['UnblendedCost']
-        )
+        # ---------------------------------------------------------------
+        # Get SageMaker costs (real or mock)
+        # ---------------------------------------------------------------
+        if mock_mode:
+            total_cost_float = get_mock_cost_response()
+        else:
+            ce_client = boto3.client('ce')
+            response = ce_client.get_cost_and_usage(
+                TimePeriod={
+                    'Start': str(start_date),
+                    'End': str(end_date)
+                },
+                Granularity='MONTHLY',
+                Filter={
+                    'Dimensions': {
+                        'Key': 'SERVICE',
+                        'Values': ['Amazon SageMaker']
+                    }
+                },
+                Metrics=['UnblendedCost']
+            )
 
-        # Calculate total cost
-        total_cost = Decimal('0')
-        if response.get('ResultsByTime'):
-            for result in response['ResultsByTime']:
-                cost = result['Total']['UnblendedCost']['Amount']
-                total_cost += Decimal(cost)
+            total_cost = Decimal('0')
+            if response.get('ResultsByTime'):
+                for result in response['ResultsByTime']:
+                    cost = result['Total']['UnblendedCost']['Amount']
+                    total_cost += Decimal(cost)
 
-        total_cost_float = float(total_cost)
+            total_cost_float = float(total_cost)
 
         print(f"Total SageMaker cost: ${total_cost_float:.2f}")
 
-        # Generate recommendations
+        # ---------------------------------------------------------------
+        # Generate recommendations & calculate savings
+        # ---------------------------------------------------------------
         recommendations = generate_recommendations(total_cost_float)
-
-        # Calculate potential savings
         total_savings = sum(r['monthly_savings'] for r in recommendations)
 
-        # Create report
+        # ---------------------------------------------------------------
+        # Build report
+        # ---------------------------------------------------------------
         report = {
             'metadata': {
                 'analysis_date': datetime.now().isoformat(),
                 'period_start': str(start_date),
                 'period_end': str(end_date),
-                'project': project_name
+                'project': project_name,
+                'mock_mode': mock_mode
             },
             'costs': {
                 'total_monthly_usd': round(total_cost_float, 2),
@@ -74,7 +99,9 @@ def handler(event, context):
             'optimization': {
                 'potential_monthly_savings': round(total_savings, 2),
                 'potential_annual_savings': round(total_savings * 12, 2),
-                'savings_percentage': round((total_savings / total_cost_float * 100) if total_cost_float > 0 else 0, 1)
+                'savings_percentage': round(
+                    (total_savings / total_cost_float * 100) if total_cost_float > 0 else 0, 1
+                )
             },
             'recommendations': recommendations,
             'summary': {
@@ -85,28 +112,39 @@ def handler(event, context):
             }
         }
 
-        # Save to S3
+        # ---------------------------------------------------------------
+        # Save report (skip S3 upload in mock mode)
+        # ---------------------------------------------------------------
         timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
         s3_key = f"reports/{timestamp}_cost-analysis.json"
 
-        s3_client.put_object(
-            Bucket=bucket_name,
-            Key=s3_key,
-            Body=json.dumps(report, indent=2),
-            ContentType='application/json'
-        )
+        if mock_mode:
+            print("[MOCK MODE] Skipping S3 upload — printing report instead:")
+            print(json.dumps(report, indent=2))
+            report_location = "local (mock mode)"
+        else:
+            s3_client = boto3.client('s3')
+            s3_client.put_object(
+                Bucket=bucket_name,
+                Key=s3_key,
+                Body=json.dumps(report, indent=2),
+                ContentType='application/json'
+            )
+            print(f"Report saved to s3://{bucket_name}/{s3_key}")
+            report_location = f's3://{bucket_name}/{s3_key}'
 
-        print(f"Report saved to s3://{bucket_name}/{s3_key}")
-
+        # ---------------------------------------------------------------
         # Return summary
+        # ---------------------------------------------------------------
         return {
             'statusCode': 200,
             'body': json.dumps({
                 'message': 'Cost analysis completed successfully',
+                'mock_mode': mock_mode,
                 'total_cost': report['costs']['total_monthly_usd'],
                 'potential_savings': report['optimization']['potential_monthly_savings'],
                 'savings_percentage': report['optimization']['savings_percentage'],
-                'report_location': f's3://{bucket_name}/{s3_key}',
+                'report_location': report_location,
                 'recommendations_count': report['summary']['total_recommendations']
             }, indent=2)
         }
@@ -122,11 +160,13 @@ def handler(event, context):
         }
 
 
+# ---------------------------------------------------------------------------
+# RECOMMENDATIONS ENGINE
+# ---------------------------------------------------------------------------
 def generate_recommendations(total_cost):
     """
-    Generate optimization recommendations based on AWS best practices
+    Generate optimization recommendations based on AWS best practices.
     """
-
     recommendations = []
 
     # Recommendation 1: Notebook Auto-Stop
@@ -214,7 +254,7 @@ def generate_recommendations(total_cost):
         'aws_documentation': 'https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html'
     })
 
-    # Recommendation 5: Reserved Capacity (if high costs)
+    # Recommendation 5: Savings Plans (high spend only)
     if total_cost > 500:
         reserved_savings = total_cost * 0.30
         recommendations.append({
