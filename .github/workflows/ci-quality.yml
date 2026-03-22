@@ -12,10 +12,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -26,31 +26,33 @@ jobs:
         run: flake8 lambda/ --max-line-length=130 --extend-ignore=E302
 
       - name: Run Mock Cost Analysis
-        working-directory: lambda
-        env:
-          MOCK_MODE: "true"
-          REPORT_BUCKET: "mock-bucket"
-          PROJECT_NAME: "ml-cost-optimizer"
         run: |
+          cd lambda
           python -c "
-          from main import handler
-          result = handler({}, {})
-          import json
-          body = json.loads(result['body'])
-          print('=== Mock Test Results ===')
-          print(f'Total cost:        \${body[\"total_cost\"]}')
-          print(f'Potential savings: \${body[\"potential_savings\"]}')
-          print(f'Savings %:         {body[\"savings_percentage\"]}%')
-          print(f'Recommendations:   {body[\"recommendations_count\"]}')
-          assert result['statusCode'] == 200, 'Handler failed!'
-          assert body['potential_savings'] > 0, 'No savings detected!'
-          print('=== All tests passed! ===')
-          "
+import sys
+sys.path.insert(0, '.')
+import os
+os.environ['MOCK_MODE'] = 'true'
+os.environ['REPORT_BUCKET'] = 'mock-bucket'
+os.environ['PROJECT_NAME'] = 'ml-cost-optimizer'
+from main import handler
+import json
+result = handler({}, {})
+body = json.loads(result['body'])
+print('=== Mock Test Results ===')
+print(f'Total cost:        \${body[\"total_cost\"]}')
+print(f'Potential savings: \${body[\"potential_savings\"]}')
+print(f'Savings %:         {body[\"savings_percentage\"]}%')
+print(f'Recommendations:   {body[\"recommendations_count\"]}')
+assert result['statusCode'] == 200, 'Handler failed!'
+assert body['potential_savings'] > 0, 'No savings detected!'
+print('=== All tests passed! ===')
+"
 
       - name: Terraform Format Check
-        uses: hashicorp/setup-terraform@v2
+        uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.0.0
+          terraform_version: 1.9.0
 
       - name: Check Terraform formatting
-        run: terraform fmt -check -recursive terraform/orm fmt -check -recursive terraform/
+        run: terraform fmt -check -recursive terraform/
