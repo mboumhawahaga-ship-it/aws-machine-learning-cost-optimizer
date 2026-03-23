@@ -32,7 +32,7 @@ jobs:
 
   # ── Job 2 : Tests avec mock ─────────────────
   test:
-    name: 🧪 Tests Mock
+    name:  Tests Mock
     runs-on: ubuntu-latest
     needs: lint  # Lance seulement si le lint passe
     steps:
