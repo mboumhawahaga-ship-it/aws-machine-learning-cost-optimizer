@@ -19,10 +19,10 @@ def generate_recommendations(cost_by_resource):
     recs = []
 
     rules = [
-        ("notebooks", 0.75, "Notebooks",  20),
-        ("training",  0.70, "Training",   50),
-        ("endpoints", 0.30, "Endpoints",  50),
-        ("storage",   0.75, "Storage",    10),
+        ("notebooks", 0.75, "Notebooks", 20),
+        ("training", 0.70, "Training", 50),
+        ("endpoints", 0.30, "Endpoints", 50),
+        ("storage", 0.75, "Storage", 10),
     ]
 
     for key, pct, name, seuil in rules:
