@@ -7,6 +7,18 @@
 
 ---
 
+## 🔍 FinOps Framework Alignment
+
+This project follows the [FinOps Foundation](https://www.finops.org) framework across its three phases:
+
+| Phase | What this tool does |
+|---|---|
+| **Inform** | Surfaces real SageMaker spend via AWS Cost Explorer and breaks it down by resource type |
+| **Optimize** | Generates prioritized recommendations (Spot, Auto-Stop, Scaling, S3 Lifecycle, Savings Plans) |
+| **Operate** | Automates report generation and lays the groundwork for recurring cost governance |
+
+---
+
 ## 💰 Estimated Savings by Use Case
 
 | Scenario | Monthly Spend | Identified Savings | Savings % |
@@ -15,7 +27,7 @@
 | Mid-size ML team | ~$850/mo | ~$720/mo | ~85% |
 | Production ML platform | ~$3,500/mo | ~$2,100/mo | ~60% |
 
-> Figures based on AWS pricing benchmarks and common SageMaker usage patterns.
+> Figures based on AWS pricing benchmarks and common SageMaker usage patterns. Actual savings depend on your specific usage mix (notebooks vs. training vs. endpoints).
 
 ---
 
@@ -53,6 +65,27 @@
   "effort": "Medium",
   "implementation_time": "1 hour"
 }
+```
+
+---
+
+## Architecture
+
+```
+AWS Cost Explorer
+       │
+       ▼
+  Lambda Handler
+       │
+       ├── Recommendations Engine
+       │         │
+       │         ├── Notebook Auto-Stop
+       │         ├── Spot Training
+       │         ├── Endpoint Scaling
+       │         ├── S3 Lifecycle
+       │         └── Savings Plans
+       │
+       └── S3 Report Storage
 ```
 
 ---
@@ -100,12 +133,6 @@ python optimize_costs.py
 
 ---
 
-## Architecture
-
-![Architecture Diagram](link_to_architecture_diagram.png)
-
----
-
 ## Customization
 
 Modify `config.yaml` to adjust thresholds:
@@ -132,29 +159,21 @@ Modify `config.yaml` to adjust thresholds:
 
 ---
 
-## Resources
-
-- [AWS Cost Explorer Documentation](https://docs.aws.amazon.com/)
-- [SageMaker Cost Optimization Guide](https://aws.amazon.com/machine-learning/)
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/fooBar`)
-3. Commit your changes (`git commit -am 'Add some fooBar'`)
-4. Push to the branch (`git push origin feature/fooBar`)
-5. Open a Pull Request
-
----
-
 ## Roadmap
 
 - [ ] Support for EMR and Bedrock cost analysis
 - [ ] Slack/email alerting for new recommendations
 - [ ] Historical trend dashboards
+- [ ] CloudWatch metrics integration for usage-based recommendations
 
 ---
 
-*Documentation last updated: 2026-01-29** last updated on 2026-01-29*
+## Resources
+
+- [FinOps Foundation Framework](https://www.finops.org/framework/)
+- [AWS Cost Explorer Documentation](https://docs.aws.amazon.com/)
+- [SageMaker Cost Optimization Guide](https://aws.amazon.com/machine-learning/)
+
+---
+
+*Documentation last updated: 2026-03-23*
