@@ -1,295 +1,104 @@
-import json
-import boto3
-import os
-from datetime import datetime, timedelta
-from decimal import Decimal
-
 # ─────────────────────────────────────────────
-# DONNÉES MOCK
-# Utilisées uniquement si MOCK_MODE=true
-# Les totaux sont cohérents : 212+297+170+42.50+128.50 = 850.00 ✅
+# CI/CD Pipeline — ML Cost Optimizer
+# Se déclenche sur chaque push et pull request
 # ─────────────────────────────────────────────
-MOCK_DATA = {
-    "total_cost": 850.00,
-    "cost_by_resource": {
-        "notebooks": 212.00,
-        "training": 297.00,
-        "endpoints": 170.00,
-        "storage": 42.50,
-        "other": 128.50
-    },
-    "usage_metrics": {
-        "notebook_idle_hours": 18,       # heures d'inactivité par jour
-        "training_jobs_on_demand": 12,   # nb de jobs on-demand ce mois
-        "endpoint_off_hours_pct": 0.40,  # 40% du temps hors heures de prod
-        "s3_data_age_days": 120          # ancienneté moyenne des données S3
-    }
-}
+name: CI Quality
 
+on:
+  push:
+    branches: [main]
+  pull_request:
 
-def get_mock_data():
-    """
-    Retourne les données simulées pour les tests locaux.
-    Évite tout appel AWS réel.
-    """
-    print("[MOCK] Simulation AWS Cost Explorer + CloudWatch...")
-    print(f"[MOCK] Coût mensuel injecté : ${MOCK_DATA['total_cost']:.2f}")
-    return MOCK_DATA
+jobs:
 
+  # ── Job 1 : Qualité du code (lint) ──────────
+  lint:
+    name: 🔍 Lint Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-# ─────────────────────────────────────────────
-# RÉCUPÉRATION DES COÛTS RÉELS (AWS Cost Explorer)
-# ─────────────────────────────────────────────
-def fetch_cost_by_resource(ce_client, start_date, end_date):
-    """
-    Interroge AWS Cost Explorer pour obtenir les coûts SageMaker
-    groupés par type d'usage (USAGE_TYPE).
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-    NOTE : Les dates doivent être au format 'YYYY-MM-DD' (ISO 8601).
-    boto3 rejette les objets datetime directement → strftime() obligatoire.
-    """
-    response = ce_client.get_cost_and_usage(
-        TimePeriod={
-            'Start': start_date.strftime('%Y-%m-%d'),
-            'End': end_date.strftime('%Y-%m-%d')
-        },
-        Granularity='MONTHLY',
-        Filter={
-            'Dimensions': {
-                'Key': 'SERVICE',
-                'Values': ['Amazon SageMaker']
-            }
-        },
-        GroupBy=[{'Type': 'DIMENSION', 'Key': 'USAGE_TYPE'}],
-        Metrics=['UnblendedCost']
-    )
+      - name: Installer flake8
+        run: pip install flake8
 
-    # Initialisation en Decimal pour éviter les erreurs d'arrondi float
-    cost_by_resource = {
-        "notebooks": Decimal('0'),
-        "training": Decimal('0'),
-        "endpoints": Decimal('0'),
-        "storage": Decimal('0'),
-        "other": Decimal('0')
-    }
+      - name: Lancer le lint
+        # On ignore E501 (lignes trop longues) pour ne pas bloquer sur les commentaires
+        run: flake8 lambda/main.py --ignore=E501
 
-    for result in response.get('ResultsByTime', []):
-        for group in result.get('Groups', []):
-            usage_type = group['Keys'][0].lower()
-            amount = Decimal(group['Metrics']['UnblendedCost']['Amount'])
+  # ── Job 2 : Tests avec mock ─────────────────
+  test:
+    name: 🧪 Tests Mock
+    runs-on: ubuntu-latest
+    needs: lint  # Lance seulement si le lint passe
+    steps:
+      - uses: actions/checkout@v4
 
-            # Classement par mot-clé dans le nom du type d'usage AWS
-            if 'notebook' in usage_type:
-                cost_by_resource['notebooks'] += amount
-            elif 'training' in usage_type:
-                cost_by_resource['training'] += amount
-            elif 'endpoint' in usage_type or 'inference' in usage_type:
-                cost_by_resource['endpoints'] += amount
-            elif 'storage' in usage_type or 's3' in usage_type:
-                cost_by_resource['storage'] += amount
-            else:
-                cost_by_resource['other'] += amount
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-    # Conversion en float pour la sérialisation JSON
-    return {k: float(v) for k, v in cost_by_resource.items()}
+      - name: Installer les dépendances
+        run: pip install boto3
 
+      - name: Lancer le test en mode mock
+        # MOCK_MODE=true → aucun appel AWS réel, pas besoin de credentials
+        env:
+          MOCK_MODE: "true"
+        run: python lambda/main.py
 
-# ─────────────────────────────────────────────
-# MÉTRIQUES D'USAGE (CloudWatch — optionnel)
-# ─────────────────────────────────────────────
-def fetch_usage_metrics(cw_client, start_date, end_date):
-    """
-    Récupère les métriques d'usage depuis CloudWatch.
+  # ── Job 3 : Build + Deploy Terraform ────────
+  deploy:
+    name: 🚀 Deploy via Terraform
+    runs-on: ubuntu-latest
+    needs: test  # Lance seulement si les tests passent
+    # Ne se déclenche que sur un push sur main (pas sur les PR)
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
 
-    NOTE : Actuellement retourne des valeurs par défaut conservatives.
-    CloudWatch peut être étendu ici pour récupérer les vraies métriques
-    (ex: CPUUtilization des notebooks, InvocationsPerInstance des endpoints…)
-    """
-    print("[INFO] Métriques d'usage : valeurs conservatives par défaut (CloudWatch optionnel)")
-    return {
-        "notebook_idle_hours": 18,
-        "training_jobs_on_demand": 12,
-        "endpoint_off_hours_pct": 0.40,
-        "s3_data_age_days": 120
-    }
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
+      - name: Zipper le code Lambda
+        # Terraform attend ../lambda/function.zip (défini dans main.tf)
+        run: |
+          cd lambda
+          zip -r function.zip main.py requirements.txt
+          echo "✅ function.zip créé ($(du -sh function.zip | cut -f1))"
 
-# ─────────────────────────────────────────────
-# GÉNÉRATION DES RECOMMANDATIONS
-# Doit être définie AVANT handler() pour être accessible
-# ─────────────────────────────────────────────
-def generate_recommendations(cost_by_resource, usage_metrics):
-    """
-    Génère une liste de recommandations d'optimisation de coûts
-    basées sur les seuils de dépense et les métriques d'usage.
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
 
-    Retourne une liste de dicts triés par priorité implicite (HIGH → LOW).
-    """
-    recommendations = []
+      - name: Terraform Init
+        working-directory: terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
+        run: terraform init
 
-    # Extraction des coûts par catégorie
-    notebook_cost = cost_by_resource.get('notebooks', 0)
-    training_cost = cost_by_resource.get('training', 0)
-    endpoint_cost = cost_by_resource.get('endpoints', 0)
-    storage_cost = cost_by_resource.get('storage', 0)
+      - name: Terraform Plan
+        working-directory: terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
+        run: terraform plan
 
-    # Extraction des métriques d'usage
-    idle_hours = usage_metrics.get('notebook_idle_hours', 0)
-    off_hours_pct = usage_metrics.get('endpoint_off_hours_pct', 0)
-    s3_age_days = usage_metrics.get('s3_data_age_days', 0)
-
-    # ── Recommandation 1 : Auto-stop notebooks ──
-    # Seuil : > 20$/mois de notebooks
-    # Logique : économie proportionnelle aux heures d'inactivité (max 80%)
-    if notebook_cost > 20:
-        idle_ratio = min(idle_hours / 24, 0.80)  # cap à 80% pour rester réaliste
-        notebook_savings = notebook_cost * idle_ratio
-        recommendations.append({
-            'id': 'rec-001',
-            'priority': 'HIGH',
-            'category': 'Compute Optimization',
-            'resource_type': 'SageMaker Notebook Instances',
-            'issue': f'Notebooks inactifs ~{idle_hours}h/jour — ${notebook_cost:.2f}/mois',
-            'recommendation': 'Activer l\'auto-stop après 1h d\'inactivité',
-            'monthly_savings': round(notebook_savings, 2),
-            'savings_percentage': round(idle_ratio * 100)
-        })
-
-    # ── Recommandation 2 : Spot Training ──
-    # Seuil : > 50$/mois de training on-demand
-    # Logique : Managed Spot Training = ~70% moins cher sur AWS
-    if training_cost > 50:
-        spot_savings = training_cost * 0.70
-        recommendations.append({
-            'id': 'rec-002',
-            'priority': 'HIGH',
-            'category': 'Training Optimization',
-            'resource_type': 'SageMaker Training Jobs',
-            'issue': f'Jobs on-demand uniquement — ${training_cost:.2f}/mois',
-            'recommendation': 'Passer au Managed Spot Training (économie ~70%)',
-            'monthly_savings': round(spot_savings, 2),
-            'savings_percentage': 70
-        })
-
-    # ── Recommandation 3 : Auto-scaling endpoints ──
-    # Seuil : > 50$/mois d'endpoints
-    # Logique : réduire à 0 instances hors heures de prod (off_hours_pct)
-    if endpoint_cost > 50:
-        endpoint_savings = endpoint_cost * off_hours_pct
-        recommendations.append({
-            'id': 'rec-003',
-            'priority': 'MEDIUM',
-            'category': 'Inference Optimization',
-            'resource_type': 'SageMaker Endpoints',
-            'issue': f'Endpoints actifs 24/7 — ${endpoint_cost:.2f}/mois',
-            'recommendation': 'Configurer l\'auto-scaling (scale-to-zero hors prod)',
-            # NOTE : avant, la savings était hardcodée à 30% sans utiliser off_hours_pct
-            'monthly_savings': round(endpoint_savings, 2),
-            'savings_percentage': round(off_hours_pct * 100)
-        })
-
-    # ── Recommandation 4 : Lifecycle S3 vers Glacier ──
-    # Seuil : > 10$/mois de stockage ET données > 90 jours
-    if storage_cost > 10 and s3_age_days > 90:
-        storage_savings = storage_cost * 0.75
-        recommendations.append({
-            'id': 'rec-004',
-            'priority': 'LOW',
-            'category': 'Storage Optimization',
-            'resource_type': 'S3 Storage',
-            'issue': f'Données âgées de {s3_age_days}j en S3 Standard — ${storage_cost:.2f}/mois',
-            'recommendation': 'Ajouter une règle Lifecycle S3 → Glacier après 90 jours',
-            'monthly_savings': round(storage_savings, 2),
-            'savings_percentage': 75
-        })
-
-    return recommendations
-
-
-# ─────────────────────────────────────────────
-# HANDLER PRINCIPAL (point d'entrée Lambda)
-# ─────────────────────────────────────────────
-def handler(event, context):
-    """
-    Point d'entrée AWS Lambda.
-    Variables d'environnement :
-      - MOCK_MODE : 'true' pour utiliser les données simulées (tests locaux)
-    """
-    print("🚀 Démarrage de l'analyse ML Cost...")
-
-    mock_mode = os.environ.get('MOCK_MODE', 'false').lower() == 'true'
-
-    # NOTE : on utilise date() pour avoir des objets compatibles strftime
-    end_date = datetime.now().date()
-    start_date = end_date - timedelta(days=30)
-
-    print(f"📊 Période analysée : {start_date} → {end_date}")
-
-    try:
-        if mock_mode:
-            data = get_mock_data()
-        else:
-            ce_client = boto3.client('ce')
-            cw_client = boto3.client('cloudwatch')
-            cost_by_resource = fetch_cost_by_resource(ce_client, start_date, end_date)
-            usage_metrics = fetch_usage_metrics(cw_client, start_date, end_date)
-            data = {
-                "cost_by_resource": cost_by_resource,
-                "usage_metrics": usage_metrics,
-                # NOTE : total calculé dynamiquement en mode réel (pas hardcodé)
-                "total_cost": sum(cost_by_resource.values())
-            }
-
-        recommendations = generate_recommendations(
-            data["cost_by_resource"],
-            data["usage_metrics"]
-        )
-
-        total_savings = sum(r['monthly_savings'] for r in recommendations)
-        total_cost = data['total_cost']
-
-        print(f"💰 Coût total : ${total_cost:.2f}")
-        print(f"💡 Économies potentielles : ${total_savings:.2f}")
-        print(f"📋 {len(recommendations)} recommandation(s) générée(s)")
-
-        # CORRECTION : protection contre la division par zéro
-        # Si AWS ne retourne aucun coût (ex: nouveau compte, filtre trop strict),
-        # total_cost peut valoir 0 et provoquer une ZeroDivisionError.
-        savings_pct = round(total_savings / total_cost * 100, 1) if total_cost > 0 else 0.0
-
-        return {
-            'statusCode': 200,
-            'body': json.dumps({
-                'success': True,
-                'period': {
-                    'start': str(start_date),
-                    'end': str(end_date)
-                },
-                'total_cost': total_cost,
-                'potential_savings': total_savings,
-                'savings_pct': savings_pct,
-                'recommendations_count': len(recommendations),
-                'recommendations': recommendations  # inclus pour faciliter le debug
-            })
-        }
-
-    except Exception as e:
-        print(f"❌ ERREUR : {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return {
-            'statusCode': 500,
-            'body': json.dumps({'success': False, 'error': str(e)})
-        }
-
-
-# ─────────────────────────────────────────────
-# TEST LOCAL
-# Lance : python ml_cost_analysis.py
-# ─────────────────────────────────────────────
-if __name__ == "__main__":
-    os.environ['MOCK_MODE'] = 'true'
-    result = handler({}, None)
-    body = json.loads(result['body'])
-    print("\n✅ Résultat :")
-    print(json.dumps(body, indent=2))
+      - name: Terraform Apply
+        working-directory: terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
+        run: terraform apply -auto-approve
