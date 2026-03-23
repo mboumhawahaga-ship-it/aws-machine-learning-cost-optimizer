@@ -165,7 +165,7 @@ def handler(event, context):
             }
             data["total_cost"] = sum(data["cost_by_resource"].values())
 
-    
+        # Génération recommendations ✅ Fonction maintenant accessible
         recommendations = generate_recommendations(data["cost_by_resource"], data["usage_metrics"])
         total_savings = sum(r['monthly_savings'] for r in recommendations)
 
