@@ -58,12 +58,16 @@
 ---
 
 ## Prerequisites
+
 - AWS Account with SageMaker usage
 - IAM permissions: `ce:GetCostAndUsage`, `s3:PutObject`, `logs:*`
+
+---
 
 ## Installation
 
 ### Local
+
 ```bash
 git clone https://github.com/mboumhawahaga-ship-it/aws-machine-learning-cost-optimizer
 cd aws-machine-learning-cost-optimizer
@@ -71,10 +75,13 @@ pip install -r requirements.txt
 ```
 
 ### AWS Lambda
+
 ```bash
 zip -r lambda_function.zip .
 # Upload lambda_function.zip to AWS Lambda console
 ```
+
+---
 
 ## Quick Start
 
@@ -91,15 +98,23 @@ python optimize_costs.py
 # Report saved to:      s3://ml-cost-optimizer-reports-xxxx/reports/2024-01-15_cost-analysis.json
 ```
 
+---
+
 ## Architecture
+
 ![Architecture Diagram](link_to_architecture_diagram.png)
+
+---
 
 ## Customization
 
 Modify `config.yaml` to adjust thresholds:
+
 - Idle timeout before auto-stop recommendation (default: 1h)
 - Minimum cost threshold to trigger Savings Plan analysis (default: $500/mo)
 - S3 data age before Glacier transition recommendation (default: 90 days)
+
+---
 
 ## Troubleshooting
 
@@ -107,15 +122,22 @@ Modify `config.yaml` to adjust thresholds:
 - **Optimizer fails to run** → Run `aws sts get-caller-identity` to verify credentials
 - **No recommendations returned** → Your SageMaker spend may be below the $50/mo minimum threshold
 
+---
+
 ## Expected Outcomes
 
 - **Week 1:** Full cost visibility across SageMaker notebooks, training jobs, and endpoints
 - **Month 1:** 60–85% cost reduction by applying High priority recommendations
 - **Month 3:** Ongoing savings compounding via auto-scaling and Savings Plans
 
+---
+
 ## Resources
+
 - [AWS Cost Explorer Documentation](https://docs.aws.amazon.com/)
 - [SageMaker Cost Optimization Guide](https://aws.amazon.com/machine-learning/)
+
+---
 
 ## Contributing
 
@@ -125,10 +147,14 @@ Modify `config.yaml` to adjust thresholds:
 4. Push to the branch (`git push origin feature/fooBar`)
 5. Open a Pull Request
 
+---
+
 ## Roadmap
+
 - [ ] Support for EMR and Bedrock cost analysis
 - [ ] Slack/email alerting for new recommendations
 - [ ] Historical trend dashboards
 
 ---
-*Documentation last updated: 2026-01-29* last updated on 2026-01-29*
+
+*Documentation last updated: 2026-01-29** last updated on 2026-01-29*
