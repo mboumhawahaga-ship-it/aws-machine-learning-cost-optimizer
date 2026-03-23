@@ -13,7 +13,7 @@ jobs:
 
   # ── Job 1 : Qualité du code (lint) ──────────
   lint:
-    name: 🔍 Lint Python
+    name: Lint Python
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +54,7 @@ jobs:
 
   # ── Job 3 : Build + Deploy Terraform ────────
   deploy:
-    name: 🚀 Deploy via Terraform
+    name: Deploy via Terraform
     runs-on: ubuntu-latest
     needs: test  # Lance seulement si les tests passent
     # Ne se déclenche que sur un push sur main (pas sur les PR)
@@ -72,7 +72,7 @@ jobs:
         run: |
           cd lambda
           zip -r function.zip main.py requirements.txt
-          echo "✅ function.zip créé ($(du -sh function.zip | cut -f1))"
+          echo " function.zip créé ($(du -sh function.zip | cut -f1))"
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
