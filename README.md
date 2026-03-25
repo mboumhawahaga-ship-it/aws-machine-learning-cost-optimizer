@@ -1,3 +1,8 @@
+
+[![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)](https://www.python.org/)
+[![AWS Lambda](https://img.shields.io/badge/AWS%20Lambda-%23FF9900.svg?&style=for-the-badge&logo=aws-lambda&logoColor=white)](https://aws.amazon.com/lambda/)
+**60-85% SageMaker savings** | **2 min setup** | **Zero infra cost**
+
 # AWS Machine Learning Cost Optimizer
 
 [![Quality Check](https://github.com/mboumhawahaga-ship-it/aws-machine-learning-cost-optimizer/actions/workflows/ci-quality.yml/badge.svg)](https://github.com/mboumhawahaga-ship-it/aws-machine-learning-cost-optimizer/actions/workflows/ci-quality.yml)
