@@ -9,6 +9,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 > Automatically analyze your AWS SageMaker spend and surface actionable savings — teams typically recover **60–85% of their ML budget** within the first month.
+> Estimated annual savings on a typical mid-size ML team: ~$8,600/year
 
 ---
 
