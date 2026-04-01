@@ -1,3 +1,4 @@
+[tool.ruff]
 line-length = 88
 select = ["E", "W", "F", "I", "UP"]
 fix = true
