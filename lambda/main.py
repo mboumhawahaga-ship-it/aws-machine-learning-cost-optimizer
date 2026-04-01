@@ -4,9 +4,26 @@ import boto3
 from datetime import datetime
 from botocore.exceptions import ClientError
 
-# Initialize AWS clients
-s3_client = boto3.client("s3")
-sns_client = boto3.client("sns")
+
+def get_sns_client():
+    """Lazy-load SNS client with region from environment"""
+    return boto3.client(
+        "sns", region_name=os.environ.get("AWS_REGION", "eu-west-1")
+    )
+
+
+def get_s3_client():
+    """Lazy-load S3 client with region from environment"""
+    return boto3.client(
+        "s3", region_name=os.environ.get("AWS_REGION", "eu-west-1")
+    )
+
+
+def get_ce_client():
+    """Lazy-load Cost Explorer client with region from environment"""
+    return boto3.client(
+        "ce", region_name=os.environ.get("AWS_REGION", "eu-west-1")
+    )
 
 # Données mock — utilisées quand MOCK_MODE=true
 MOCK_DATA = {
@@ -213,7 +230,7 @@ def save_json_report(
 
         # Upload to S3
         json_key = f"reports/report_{report_date}.json"
-        s3_client.put_object(
+        get_s3_client().put_object(
             Bucket=bucket_name,
             Key=json_key,
             Body=json.dumps(report_data, indent=2),
@@ -243,7 +260,7 @@ def save_markdown_report(bucket_name, markdown_content, report_date):
     """
     try:
         md_key = f"reports/report_{report_date}.md"
-        s3_client.put_object(
+        get_s3_client().put_object(
             Bucket=bucket_name,
             Key=md_key,
             Body=markdown_content.encode("utf-8"),
@@ -280,7 +297,7 @@ def send_sns_notification(
             f"Full report: {markdown_s3_url}"
         )
 
-        response = sns_client.publish(
+        response = get_sns_client().publish(
             TopicArn=sns_topic_arn,
             Subject="ML Cost Analysis Report - Weekly Summary",
             Message=message,

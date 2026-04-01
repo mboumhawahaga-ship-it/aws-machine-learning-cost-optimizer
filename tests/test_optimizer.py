@@ -7,9 +7,7 @@ to patch boto3 clients.
 
 import json
 import os
-import pytest
 from unittest import mock
-from datetime import datetime
 from botocore.exceptions import ClientError
 
 # Import Lambda handler from main
@@ -25,7 +23,6 @@ from main import (
     generate_recommendations,
     generate_markdown_report,
     save_json_report,
-    send_sns_notification,
 )
 
 
@@ -52,19 +49,26 @@ class TestCostAnalysis:
 
         # Check each recommendation has required fields with correct types
         for rec in recs:
-            assert isinstance(rec["type"], str), f"type must be string"
-            assert isinstance(rec["cost"], float), f"cost must be float"
-            assert isinstance(rec["savings"], float), f"savings must be float"
-            assert isinstance(rec["savings_pct"], int), f"savings_pct must be int"
-            assert rec["effort"] in ["Low", "Medium", "High"], f"Invalid effort level"
-            assert rec["priority"] in ["Critical", "High", "Medium"], f"Invalid priority"
-            assert isinstance(rec["issue"], str), f"issue must be string"
+            assert isinstance(rec["type"], str), "type must be string"
+            assert isinstance(rec["cost"], float), "cost must be float"
+            assert isinstance(rec["savings"], float), "savings must be float"
+            assert isinstance(rec["savings_pct"], int), "savings_pct must be int"
+            assert (
+                rec["effort"] in ["Low", "Medium", "High"]
+            ), "Invalid effort level"
+            assert (
+                rec["priority"] in ["Critical", "High", "Medium"]
+            ), "Invalid priority"
+            assert isinstance(rec["issue"], str), "issue must be string"
 
         # Verify recommendations are sorted by priority (ROI-based)
         priorities = [rec["priority"] for rec in recs]
         # Should be sorted: Critical → High → Medium
-        expected_order = sorted(priorities, key=lambda x: {"Critical": 0, "High": 1, "Medium": 2}.get(x, 99))
-        assert priorities == expected_order, "Recommendations should be sorted by priority"
+        priority_order = {"Critical": 0, "High": 1, "Medium": 2}
+        expected_order = sorted(priorities, key=lambda x: priority_order.get(x, 99))
+        assert (
+            priorities == expected_order
+        ), "Recommendations should be sorted by priority"
 
     def test_notebook_idle_detection_with_low_usage(self):
         """
@@ -86,28 +90,39 @@ class TestCostAnalysis:
         assert len(notebook_recs) > 0, "Notebook optimization should be detected"
 
         notebook_rec = notebook_recs[0]
-        assert notebook_rec["issue"] == "Enable auto-stop for idle notebooks (detect no activity per 24h)"
+        expected_issue = (
+            "Enable auto-stop for idle notebooks (detect no activity per 24h)"
+        )
+        assert (
+            notebook_rec["issue"] == expected_issue
+        ), "Should detect idle notebook optimization"
         assert notebook_rec["savings"] > 0, "Savings should be positive"
-        assert notebook_rec["effort"] == "Low", "Notebook optimization should require low effort"
+        assert (
+            notebook_rec["effort"] == "Low"
+        ), "Notebook optimization should require low effort"
 
     def test_sns_failure_doesnt_crash_lambda(self):
         """
         Mock SNS to raise an exception and verify that Lambda
         returns success anyway (non-blocking error handling)
         """
-        # Patch boto3 SNS client to raise error
-        with mock.patch("main.sns_client") as mock_sns:
-            mock_sns.publish.side_effect = ClientError(
-                {"Error": {"Code": "InvalidParameter", "Message": "Invalid topic"}},
-                "Publish"
-            )
+        # Create mock SNS client that raises error
+        mock_sns_client = mock.MagicMock()
+        mock_sns_client.publish.side_effect = ClientError(
+            {"Error": {"Code": "InvalidParameter", "Message": "Invalid topic"}},
+            "Publish",
+        )
 
+        # Patch get_sns_client to return the mock
+        with mock.patch("main.get_sns_client", return_value=mock_sns_client):
             # Call handler - should NOT raise exception
             result = handler({}, None)
 
             # Response should still be successful
-            assert result["statusCode"] == 200, "Lambda should return 200 even with SNS error"
-            
+            assert (
+                result["statusCode"] == 200
+            ), "Lambda should return 200 even with SNS error"
+
             body = json.loads(result["body"])
             assert body["success"] is True, "Handler should return success=true"
             print("✅ SNS failure handled gracefully (non-blocking)")
@@ -149,8 +164,12 @@ class TestCostAnalysis:
         )
 
         # Check required sections
-        assert "Executive Summary" in markdown, "Should contain Executive Summary"
-        assert "Optimization Recommendations" in markdown, "Should contain Recommendations section"
+        assert (
+            "Executive Summary" in markdown
+        ), "Should contain Executive Summary"
+        assert (
+            "Optimization Recommendations" in markdown
+        ), "Should contain Recommendations section"
         assert "Next Steps" in markdown, "Should contain Next Steps"
 
         # Check metrics
@@ -160,7 +179,9 @@ class TestCostAnalysis:
 
         # Check table format (Markdown tables use |)
         assert "|" in markdown, "Should contain Markdown table formatting"
-        assert "Category" in markdown or "Notebooks" in markdown, "Should list optimization categories"
+        assert (
+            "Category" in markdown or "Notebooks" in markdown
+        ), "Should list optimization categories"
 
         # Check Next Steps section has numbered items
         assert "1." in markdown, "Next Steps should be numbered"
@@ -206,14 +227,14 @@ class TestJSONReportSchema:
             }
 
             # Mock boto3 S3 client
-            with mock.patch("main.s3_client", s3):
+            with mock.patch("main.get_s3_client", return_value=s3):
                 json_url = save_json_report(
                     "test-bucket",
                     test_data["total_cost"],
                     test_data["total_savings"],
                     test_data["savings_pct"],
                     test_data["recs"],
-                    test_data["report_date"]
+                    test_data["report_date"],
                 )
 
             # Verify URL format
@@ -222,14 +243,22 @@ class TestJSONReportSchema:
             assert json_url.endswith(".json"), "URL should end with .json"
 
             # Retrieve and validate JSON schema
-            response = s3.get_object(Bucket="test-bucket", Key="reports/report_2026-04-01.json")
+            response = s3.get_object(
+                Bucket="test-bucket", Key="reports/report_2026-04-01.json"
+            )
             report_data = json.loads(response["Body"].read())
 
             # Validate metadata section
             assert "metadata" in report_data, "Should have metadata section"
-            assert "report_date" in report_data["metadata"], "Metadata should have report_date"
-            assert "generated_at" in report_data["metadata"], "Metadata should have generated_at"
-            assert "version" in report_data["metadata"], "Metadata should have version"
+            assert (
+                "report_date" in report_data["metadata"]
+            ), "Metadata should have report_date"
+            assert (
+                "generated_at" in report_data["metadata"]
+            ), "Metadata should have generated_at"
+            assert (
+                "version" in report_data["metadata"]
+            ), "Metadata should have version"
 
             # Validate summary section
             assert "summary" in report_data, "Should have summary section"
@@ -239,8 +268,12 @@ class TestJSONReportSchema:
             assert isinstance(report_data["summary"]["recommendation_count"], int)
 
             # Validate optimizations array
-            assert "optimizations" in report_data, "Should have optimizations section"
-            assert len(report_data["optimizations"]) > 0, "Should have at least one optimization"
+            assert (
+                "optimizations" in report_data
+            ), "Should have optimizations section"
+            assert (
+                len(report_data["optimizations"]) > 0
+            ), "Should have at least one optimization"
 
             opt = report_data["optimizations"][0]
             assert opt["category"] == "Training"
