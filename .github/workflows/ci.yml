@@ -34,6 +34,9 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Run tests with coverage
+        env:
+          AWS_REGION: eu-west-1
+          MOCK_MODE: "true"
         run: |
           pytest tests/ \
             --cov=lambda \
