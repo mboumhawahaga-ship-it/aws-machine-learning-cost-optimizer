@@ -1,4 +1,11 @@
 [tool.ruff]
 line-length = 88
-select = ["E", "W", "F"]
+select = ["E", "W", "F", "I", "UP"]
 fix = true
+unfixable = []
+
+# Ignore common non-issues
+ignore = [
+  "E501",  # Line length (handled by formatter)
+  "W503",  # Line break before binary operator
+]
