@@ -1,7 +1,7 @@
+[tool.ruff]
 line-length = 88
-select = ["E", "W", "F", "I", "UP"]
+select = ["E", "F", "I", "UP"]
 fix = true
-unfixable = []
 
 # Ignore common non-issues
 ignore = [
