@@ -28,6 +28,23 @@ resource "aws_s3_bucket" "cost_reports" {
   }
 }
 
+# SNS Topic pour les notifications
+resource "aws_sns_topic" "cost_analysis_notifications" {
+  name = "${var.project_name}-notifications"
+
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "Terraform"
+  }
+}
+
+# SNS Topic Subscription - Subscribe email
+resource "aws_sns_topic_subscription" "cost_analysis_email" {
+  topic_arn = aws_sns_topic.cost_analysis_notifications.arn
+  protocol  = "email"
+  endpoint  = var.notification_email
+}
+
 # IAM Role pour Lambda
 resource "aws_iam_role" "lambda_role" {
   name = "${var.project_name}-lambda-role"
@@ -51,30 +68,14 @@ resource "aws_iam_role" "lambda_role" {
   }
 }
 
-# IAM Policy pour Lambda
-resource "aws_iam_role_policy" "lambda_policy" {
-  name = "${var.project_name}-lambda-policy"
+# IAM Policy pour Lambda - Logs (common to all Lambda functions)
+resource "aws_iam_role_policy" "lambda_logs_policy" {
+  name = "${var.project_name}-lambda-logs-policy"
   role = aws_iam_role.lambda_role.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "ce:GetCostAndUsage",
-          "ce:GetCostForecast"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "s3:PutObject",
-          "s3:PutObjectAcl"
-        ]
-        Resource = "${aws_s3_bucket.cost_reports.arn}/*"
-      },
       {
         Effect = "Allow"
         Action = [
@@ -101,8 +102,10 @@ resource "aws_lambda_function" "cost_analyzer" {
 
   environment {
     variables = {
-      REPORT_BUCKET = aws_s3_bucket.cost_reports.id
-      PROJECT_NAME  = var.project_name
+      REPORT_BUCKET    = aws_s3_bucket.cost_reports.id
+      PROJECT_NAME     = var.project_name
+      SNS_TOPIC_ARN    = aws_sns_topic.cost_analysis_notifications.arn
+      NOTIFICATION_EMAIL = var.notification_email
     }
   }
 

@@ -9,3 +9,9 @@ variable "project_name" {
   type        = string
   default     = "ml-cost-optimizer"
 }
+
+variable "notification_email" {
+  description = "Email address for SNS notifications of cost analysis reports"
+  type        = string
+  sensitive   = true
+}
