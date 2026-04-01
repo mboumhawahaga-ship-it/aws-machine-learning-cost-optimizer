@@ -7,21 +7,21 @@ to patch boto3 clients.
 
 import json
 import os
+import sys
 from unittest import mock
+
 from botocore.exceptions import ClientError
 
-# Import Lambda handler from main
+# Set environment variables before importing local modules
 os.environ["MOCK_MODE"] = "true"
 os.environ["REPORT_BUCKET"] = "test-bucket"
 os.environ["SNS_TOPIC_ARN"] = "arn:aws:sns:eu-west-1:123456789:test-topic"
-
-import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../lambda"))
 
-from main import (
-    handler,
-    generate_recommendations,
+from main import (  # noqa: E402
     generate_markdown_report,
+    generate_recommendations,
+    handler,
     save_json_report,
 )
 
@@ -39,7 +39,7 @@ class TestCostAnalysis:
             "training": 297.00,
             "endpoints": 170.00,
             "storage": 42.50,
-            "other": 128.50
+            "other": 128.50,
         }
 
         recs = generate_recommendations(cost_by_resource)
@@ -53,12 +53,8 @@ class TestCostAnalysis:
             assert isinstance(rec["cost"], float), "cost must be float"
             assert isinstance(rec["savings"], float), "savings must be float"
             assert isinstance(rec["savings_pct"], int), "savings_pct must be int"
-            assert (
-                rec["effort"] in ["Low", "Medium", "High"]
-            ), "Invalid effort level"
-            assert (
-                rec["priority"] in ["Critical", "High", "Medium"]
-            ), "Invalid priority"
+            assert rec["effort"] in ["Low", "Medium", "High"], "Invalid effort level"
+            assert rec["priority"] in ["Critical", "High", "Medium"], "Invalid priority"
             assert isinstance(rec["issue"], str), "issue must be string"
 
         # Verify recommendations are sorted by priority (ROI-based)
@@ -80,7 +76,7 @@ class TestCostAnalysis:
             "training": 0.0,
             "endpoints": 0.0,
             "storage": 0.0,
-            "other": 0.0
+            "other": 0.0,
         }
 
         recs = generate_recommendations(cost_by_resource)
@@ -142,7 +138,7 @@ class TestCostAnalysis:
                 "savings": 212.00,
                 "savings_pct": 75,
                 "effort": "Low",
-                "priority": "High"
+                "priority": "High",
             },
             {
                 "type": "Training",
@@ -150,23 +146,17 @@ class TestCostAnalysis:
                 "savings": 207.90,
                 "savings_pct": 70,
                 "effort": "Medium",
-                "priority": "Critical"
-            }
+                "priority": "Critical",
+            },
         ]
         report_date = "2026-04-01"
 
         markdown = generate_markdown_report(
-            total_cost,
-            total_savings,
-            savings_pct,
-            recs,
-            report_date
+            total_cost, total_savings, savings_pct, recs, report_date
         )
 
         # Check required sections
-        assert (
-            "Executive Summary" in markdown
-        ), "Should contain Executive Summary"
+        assert "Executive Summary" in markdown, "Should contain Executive Summary"
         assert (
             "Optimization Recommendations" in markdown
         ), "Should contain Recommendations section"
@@ -202,10 +192,11 @@ class TestJSONReportSchema:
         with mock_aws():
             # Create mock S3 bucket
             import boto3
+
             s3 = boto3.client("s3", region_name="eu-west-1")
             s3.create_bucket(
                 Bucket="test-bucket",
-                CreateBucketConfiguration={"LocationConstraint": "eu-west-1"}
+                CreateBucketConfiguration={"LocationConstraint": "eu-west-1"},
             )
 
             test_data = {
@@ -220,10 +211,10 @@ class TestJSONReportSchema:
                         "savings_pct": 70,
                         "effort": "Medium",
                         "priority": "Critical",
-                        "issue": "Use Spot instances"
+                        "issue": "Use Spot instances",
                     }
                 ],
-                "report_date": "2026-04-01"
+                "report_date": "2026-04-01",
             }
 
             # Mock boto3 S3 client
@@ -256,9 +247,7 @@ class TestJSONReportSchema:
             assert (
                 "generated_at" in report_data["metadata"]
             ), "Metadata should have generated_at"
-            assert (
-                "version" in report_data["metadata"]
-            ), "Metadata should have version"
+            assert "version" in report_data["metadata"], "Metadata should have version"
 
             # Validate summary section
             assert "summary" in report_data, "Should have summary section"
@@ -268,9 +257,7 @@ class TestJSONReportSchema:
             assert isinstance(report_data["summary"]["recommendation_count"], int)
 
             # Validate optimizations array
-            assert (
-                "optimizations" in report_data
-            ), "Should have optimizations section"
+            assert "optimizations" in report_data, "Should have optimizations section"
             assert (
                 len(report_data["optimizations"]) > 0
             ), "Should have at least one optimization"
