@@ -6,5 +6,4 @@ unfixable = []
 # Ignore common non-issues
 ignore = [
   "E501",  # Line length (handled by formatter)
-  "W503",  # Line break before binary operator
 ]
