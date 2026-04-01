@@ -1,29 +1,25 @@
 import json
 import os
-import boto3
 from datetime import datetime
+
+import boto3
 from botocore.exceptions import ClientError
 
 
 def get_sns_client():
     """Lazy-load SNS client with region from environment"""
-    return boto3.client(
-        "sns", region_name=os.environ.get("AWS_REGION", "eu-west-1")
-    )
+    return boto3.client("sns", region_name=os.environ.get("AWS_REGION", "eu-west-1"))
 
 
 def get_s3_client():
     """Lazy-load S3 client with region from environment"""
-    return boto3.client(
-        "s3", region_name=os.environ.get("AWS_REGION", "eu-west-1")
-    )
+    return boto3.client("s3", region_name=os.environ.get("AWS_REGION", "eu-west-1"))
 
 
 def get_ce_client():
     """Lazy-load Cost Explorer client with region from environment"""
-    return boto3.client(
-        "ce", region_name=os.environ.get("AWS_REGION", "eu-west-1")
-    )
+    return boto3.client("ce", region_name=os.environ.get("AWS_REGION", "eu-west-1"))
+
 
 # Données mock — utilisées quand MOCK_MODE=true
 MOCK_DATA = {

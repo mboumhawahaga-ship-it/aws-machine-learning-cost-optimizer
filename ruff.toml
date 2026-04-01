@@ -1,9 +1,8 @@
-[tool.ruff]
 line-length = 88
-select = ["E", "F", "I", "UP"]
-fix = true
 
-# Ignore common non-issues
+[lint]
+select = ["E", "W", "F", "I", "UP"]
 ignore = [
   "E501",  # Line length (handled by formatter)
 ]
+unfixable = []
