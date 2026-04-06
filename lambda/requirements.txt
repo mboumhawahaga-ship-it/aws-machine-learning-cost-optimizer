@@ -1,2 +1,2 @@
 # boto3 is included in AWS Lambda runtime
-# No additional dependencies needed
+aws-lambda-powertools

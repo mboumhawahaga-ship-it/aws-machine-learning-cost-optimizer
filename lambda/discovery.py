@@ -2,7 +2,10 @@ import os
 from datetime import datetime, timezone
 
 import boto3
+from aws_lambda_powertools import Logger
 from botocore.exceptions import ClientError
+
+logger = Logger(service="ml-cost-optimizer")
 
 
 def get_sagemaker_client():
@@ -49,11 +52,11 @@ def scan_notebooks():
                 }
             )
 
-        print(f"✅ {len(notebooks)} notebooks trouvés")
+        logger.info(f"✅ {len(notebooks)} notebooks trouvés")
         return notebooks
 
     except ClientError as e:
-        print(f"❌ Erreur scan notebooks : {e}")
+        logger.error(f"❌ Erreur scan notebooks : {e}")
         return []
 
 
@@ -80,11 +83,11 @@ def scan_endpoints():
                 }
             )
 
-        print(f"✅ {len(endpoints)} endpoints trouvés")
+        logger.info(f"✅ {len(endpoints)} endpoints trouvés")
         return endpoints
 
     except ClientError as e:
-        print(f"❌ Erreur scan endpoints : {e}")
+        logger.error(f"❌ Erreur scan endpoints : {e}")
         return []
 
 
@@ -111,11 +114,11 @@ def scan_training_jobs():
                 }
             )
 
-        print(f"✅ {len(jobs)} training jobs trouvés")
+        logger.info(f"✅ {len(jobs)} training jobs trouvés")
         return jobs
 
     except ClientError as e:
-        print(f"❌ Erreur scan training jobs : {e}")
+        logger.error(f"❌ Erreur scan training jobs : {e}")
         return []
 
 
@@ -223,7 +226,7 @@ def run_discovery():
     Returns:
         dict: Rapport complet avec toutes les ressources
     """
-    print("🔍 Démarrage du scan SageMaker...")
+    logger.info("🔍 Démarrage du scan SageMaker...")
 
     notebooks = scan_notebooks()
     endpoints = scan_endpoints()
@@ -248,7 +251,7 @@ def run_discovery():
         "rgpd_compliance": _build_rgpd_compliance(notebooks, endpoints),
     }
 
-    print(
+    logger.info(
         f"📊 Scan terminé : {len(running_notebooks)} notebooks actifs, {len(running_endpoints)} endpoints actifs"
     )
     return rapport

@@ -5,7 +5,10 @@ import os
 from datetime import datetime, timezone
 
 import boto3
+from aws_lambda_powertools import Logger
 from botocore.exceptions import ClientError
+
+logger = Logger(service="ml-cost-optimizer")
 
 
 def get_sagemaker_client():
@@ -29,7 +32,7 @@ def stop_notebook(notebook_name):
         get_sagemaker_client().stop_notebook_instance(
             NotebookInstanceName=notebook_name
         )
-        print(f"✅ [{timestamp}] Notebook arrêté : {notebook_name}")
+        logger.info(f"✅ [{timestamp}] Notebook arrêté : {notebook_name}")
         return {
             "resource": notebook_name,
             "action": "stop_notebook",
@@ -37,7 +40,7 @@ def stop_notebook(notebook_name):
             "timestamp": timestamp,
         }
     except ClientError as e:
-        print(f"❌ [{timestamp}] Échec arrêt notebook {notebook_name} : {e}")
+        logger.error(f"❌ [{timestamp}] Échec arrêt notebook {notebook_name} : {e}")
         return {
             "resource": notebook_name,
             "action": "stop_notebook",
@@ -60,7 +63,7 @@ def delete_endpoint(endpoint_name):
     timestamp = datetime.now(timezone.utc).isoformat()
     try:
         get_sagemaker_client().delete_endpoint(EndpointName=endpoint_name)
-        print(f"✅ [{timestamp}] Endpoint supprimé : {endpoint_name}")
+        logger.info(f"✅ [{timestamp}] Endpoint supprimé : {endpoint_name}")
         return {
             "resource": endpoint_name,
             "action": "delete_endpoint",
@@ -68,7 +71,9 @@ def delete_endpoint(endpoint_name):
             "timestamp": timestamp,
         }
     except ClientError as e:
-        print(f"❌ [{timestamp}] Échec suppression endpoint {endpoint_name} : {e}")
+        logger.error(
+            f"❌ [{timestamp}] Échec suppression endpoint {endpoint_name} : {e}"
+        )
         return {
             "resource": endpoint_name,
             "action": "delete_endpoint",
@@ -88,7 +93,7 @@ def handler(event, context):
             "resource_name": "<nom de la ressource>"
         }
     """
-    print("🚀 Action Lambda - Démarrage")
+    logger.info("🚀 Action Lambda - Démarrage")
 
     try:
         action_type = event.get("action_type")
@@ -111,7 +116,7 @@ def handler(event, context):
         return {"statusCode": 200, "body": json.dumps(result)}
 
     except Exception as e:
-        print(f"❌ Erreur fatale : {e}")
+        logger.error(f"❌ Erreur fatale : {e}")
         return {
             "statusCode": 500,
             "body": json.dumps({"success": False, "error": str(e)}),

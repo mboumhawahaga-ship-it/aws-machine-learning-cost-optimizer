@@ -3,8 +3,11 @@ import os
 from datetime import date, datetime, timezone
 
 import boto3
+from aws_lambda_powertools import Logger
 from botocore.exceptions import ClientError
 from discovery import run_discovery
+
+logger = Logger(service="ml-cost-optimizer")
 
 
 def get_sns_client():
@@ -232,10 +235,10 @@ def save_json_report(
         )
 
         s3_url = f"s3://{bucket_name}/{json_key}"
-        print(f"✅ JSON report saved: {s3_url}")
+        logger.info(f"✅ JSON report saved: {s3_url}")
         return s3_url
     except ClientError as e:
-        print(f"❌ Error saving JSON report to S3: {e}")
+        logger.error(f"❌ Error saving JSON report to S3: {e}")
         raise
 
 
@@ -262,10 +265,10 @@ def save_markdown_report(bucket_name, markdown_content, report_date):
         )
 
         s3_url = f"s3://{bucket_name}/{md_key}"
-        print(f"✅ Markdown report saved: {s3_url}")
+        logger.info(f"✅ Markdown report saved: {s3_url}")
         return s3_url
     except ClientError as e:
-        print(f"❌ Error saving Markdown report to S3: {e}")
+        logger.error(f"❌ Error saving Markdown report to S3: {e}")
         raise
 
 
@@ -296,11 +299,11 @@ def send_sns_notification(
             Message=message,
         )
 
-        print(f"✅ SNS notification sent: {response['MessageId']}")
+        logger.info(f"✅ SNS notification sent: {response['MessageId']}")
         return response
     except ClientError as e:
         # Log error but don't fail Lambda execution
-        print(f"⚠️  Warning: SNS notification failed (non-blocking): {e}")
+        logger.warning(f"⚠️  Warning: SNS notification failed (non-blocking): {e}")
         return None
 
 
@@ -328,7 +331,7 @@ def get_real_costs():
 
         results = response.get("ResultsByTime", [])
         if not results:
-            print("⚠️ Cost Explorer : aucun résultat, fallback sur mock data")
+            logger.warning("⚠️ Cost Explorer : aucun résultat, fallback sur mock data")
             return MOCK_DATA
 
         total_cost = sum(
@@ -338,7 +341,7 @@ def get_real_costs():
         )
 
         if total_cost == 0:
-            print("⚠️ Cost Explorer : coût total à 0, fallback sur mock data")
+            logger.warning("⚠️ Cost Explorer : coût total à 0, fallback sur mock data")
             return MOCK_DATA
 
         # Répartition estimée par type de ressource (proportions SageMaker typiques)
@@ -350,14 +353,14 @@ def get_real_costs():
             "other": round(total_cost * 0.15, 2),
         }
 
-        print(f"✅ Cost Explorer : coût SageMaker du mois = ${total_cost:,.2f}")
+        logger.info(f"✅ Cost Explorer : coût SageMaker du mois = ${total_cost:,.2f}")
         return {
             "total_cost": round(total_cost, 2),
             "cost_by_resource": cost_by_resource,
         }
 
     except ClientError as e:
-        print(f"❌ Erreur Cost Explorer : {e}, fallback sur mock data")
+        logger.error(f"❌ Erreur Cost Explorer : {e}, fallback sur mock data")
         return MOCK_DATA
 
 
@@ -373,7 +376,7 @@ def handler(event, context):
     5. Send SNS notification (non-blocking)
     6. Return structured response
     """
-    print("🚀 ML Cost Analysis - Starting")
+    logger.info("🚀 ML Cost Analysis - Starting")
 
     try:
         # Get environment variables
@@ -386,12 +389,12 @@ def handler(event, context):
 
         # Fetch cost data
         if mock_mode:
-            print("📊 Using mock data (MOCK_MODE=true)")
+            logger.info("📊 Using mock data (MOCK_MODE=true)")
             data = MOCK_DATA
         else:
-            print("📊 Fetching real costs from Cost Explorer...")
+            logger.info("📊 Fetching real costs from Cost Explorer...")
             data = get_real_costs()
-            print("🔍 Scanning real SageMaker resources...")
+            logger.info("🔍 Scanning real SageMaker resources...")
             data["discovery"] = run_discovery()
 
         # Generate recommendations (sorted by ROI/Priority)
@@ -405,10 +408,10 @@ def handler(event, context):
         # Generate report date
         report_date = datetime.now().strftime("%Y-%m-%d")
 
-        print(f"💰 Total Cost   : ${total_cost:,.2f}")
-        print(f"💸 Total Savings: ${total_savings:,.2f}")
-        print(f"📈 Savings %    : {savings_pct}%")
-        print(f"📋 Recommendations: {len(recs)}")
+        logger.info(f"💰 Total Cost   : ${total_cost:,.2f}")
+        logger.info(f"💸 Total Savings: ${total_savings:,.2f}")
+        logger.info(f"📈 Savings %    : {savings_pct}%")
+        logger.info(f"📋 Recommendations: {len(recs)}")
 
         # Initialize report URLs (may not be set in mock mode)
         json_url = None
@@ -434,9 +437,11 @@ def handler(event, context):
                     sns_topic_arn, total_savings, savings_pct, len(recs), markdown_url
                 )
             else:
-                print("⚠️  Warning: SNS_TOPIC_ARN not configured, skipping notification")
+                logger.warning(
+                    "⚠️  Warning: SNS_TOPIC_ARN not configured, skipping notification"
+                )
         else:
-            print("⏭️  Skipping S3 uploads and SNS in MOCK_MODE")
+            logger.info("⏭️  Skipping S3 uploads and SNS in MOCK_MODE")
 
         # Return success response
         response_data = {
@@ -457,7 +462,7 @@ def handler(event, context):
         return {"statusCode": 200, "body": json.dumps(response_data, indent=2)}
 
     except Exception as e:
-        print(f"❌ Fatal error: {e}")
+        logger.error(f"❌ Fatal error: {e}")
         return {
             "statusCode": 500,
             "body": json.dumps({"success": False, "error": str(e)}),

@@ -3,7 +3,7 @@ import os
 import sys
 
 # Ajoute le dossier lambda au path pour pouvoir importer main.py
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lambda"))
 from main import MOCK_DATA, generate_recommendations, handler
 
 # ─────────────────────────────────────────────
