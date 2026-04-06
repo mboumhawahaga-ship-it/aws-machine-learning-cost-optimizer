@@ -13,7 +13,9 @@ resource "aws_iam_role_policy" "lambda_sagemaker_policy" {
           "sagemaker:ListNotebookInstances",
           "sagemaker:ListTrainingJobs",
           "sagemaker:ListEndpoints",
-          "sagemaker:DescribeNotebookInstance"
+          "sagemaker:DescribeNotebookInstance",
+          "sagemaker:StopNotebookInstance",
+          "sagemaker:DeleteEndpoint"
         ]
         Resource = "*"
       },

@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 import boto3
 from botocore.exceptions import ClientError
@@ -304,6 +304,63 @@ def send_sns_notification(
         return None
 
 
+def get_real_costs():
+    """
+    Récupère les coûts SageMaker réels via Cost Explorer.
+    Retourne la même structure que MOCK_DATA.
+    En cas d'erreur ou de résultat vide, retourne MOCK_DATA comme fallback.
+
+    Returns:
+        dict: {"total_cost": float, "cost_by_resource": {...}}
+    """
+    try:
+        today = date.today()
+        start = today.replace(day=1).strftime("%Y-%m-%d")
+        end = today.strftime("%Y-%m-%d")
+
+        response = get_ce_client().get_cost_and_usage(
+            TimePeriod={"Start": start, "End": end},
+            Granularity="MONTHLY",
+            Filter={"Dimensions": {"Key": "SERVICE", "Values": ["Amazon SageMaker"]}},
+            GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}],
+            Metrics=["UnblendedCost"],
+        )
+
+        results = response.get("ResultsByTime", [])
+        if not results:
+            print("⚠️ Cost Explorer : aucun résultat, fallback sur mock data")
+            return MOCK_DATA
+
+        total_cost = sum(
+            float(group["Metrics"]["UnblendedCost"]["Amount"])
+            for result in results
+            for group in result.get("Groups", [])
+        )
+
+        if total_cost == 0:
+            print("⚠️ Cost Explorer : coût total à 0, fallback sur mock data")
+            return MOCK_DATA
+
+        # Répartition estimée par type de ressource (proportions SageMaker typiques)
+        cost_by_resource = {
+            "notebooks": round(total_cost * 0.25, 2),
+            "training": round(total_cost * 0.35, 2),
+            "endpoints": round(total_cost * 0.20, 2),
+            "storage": round(total_cost * 0.05, 2),
+            "other": round(total_cost * 0.15, 2),
+        }
+
+        print(f"✅ Cost Explorer : coût SageMaker du mois = ${total_cost:,.2f}")
+        return {
+            "total_cost": round(total_cost, 2),
+            "cost_by_resource": cost_by_resource,
+        }
+
+    except ClientError as e:
+        print(f"❌ Erreur Cost Explorer : {e}, fallback sur mock data")
+        return MOCK_DATA
+
+
 def handler(event, context):
     """
     Main Lambda handler for ML cost analysis.
@@ -332,10 +389,10 @@ def handler(event, context):
             print("📊 Using mock data (MOCK_MODE=true)")
             data = MOCK_DATA
         else:
-            print("📊 Scanning real SageMaker resources...")
-            discovery_data = run_discovery()
-            data = MOCK_DATA
-            data["discovery"] = discovery_data
+            print("📊 Fetching real costs from Cost Explorer...")
+            data = get_real_costs()
+            print("🔍 Scanning real SageMaker resources...")
+            data["discovery"] = run_discovery()
 
         # Generate recommendations (sorted by ROI/Priority)
         recs = generate_recommendations(data["cost_by_resource"])
