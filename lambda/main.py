@@ -1,9 +1,10 @@
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 import boto3
 from botocore.exceptions import ClientError
+from discovery import run_discovery
 
 
 def get_sns_client():
@@ -191,11 +192,7 @@ def save_json_report(
         str: URL du fichier JSON en S3
     """
     try:
-        now = (
-            datetime.now(datetime.UTC)
-            if hasattr(datetime, "UTC")
-            else datetime.utcnow()
-        )
+        now = datetime.now(timezone.utc)
 
         # Structured JSON with strict schema
         report_data = {
@@ -335,9 +332,10 @@ def handler(event, context):
             print("📊 Using mock data (MOCK_MODE=true)")
             data = MOCK_DATA
         else:
-            # TODO: Replace with real boto3 calls to Cost Explorer when configured
-            print("📊 Using mock data (real AWS integration pending)")
+            print("📊 Scanning real SageMaker resources...")
+            discovery_data = run_discovery()
             data = MOCK_DATA
+            data["discovery"] = discovery_data
 
         # Generate recommendations (sorted by ROI/Priority)
         recs = generate_recommendations(data["cost_by_resource"])
@@ -411,7 +409,6 @@ def handler(event, context):
 
 if __name__ == "__main__":
     # Local test mode - only with MOCK_MODE
-    os.environ["MOCK_MODE"] = "true"
     os.environ["REPORT_BUCKET"] = "test-bucket"  # Won't actually upload in mock mode
 
     result = handler({}, None)
