@@ -64,6 +64,18 @@ Prices pulled live from the AWS Pricing API — always current.
 
 ---
 
+## How to Present This Project
+
+| Audience | What They Want to See | Best Tool |
+|---|---|---|
+| Developers | Code quality, CI/CD, structured logs | Badges, Lambda Powertools, GitHub Actions |
+| Recruiters | Product mindset, ability to ship | Demo GIF, structured README |
+| Managers / DSI | ROI, savings, risk control | Streamlit dashboard, Loom video |
+| FinOps | Cost accuracy, automation | AWS Pricing API, Cost Explorer report |
+| DPO / Legal | RGPD compliance, audit trail | RGPD compliance report, CloudTrail |
+
+---
+
 ## Setup in 2 Minutes
 
 You need an AWS account and Terraform installed. That's it.
