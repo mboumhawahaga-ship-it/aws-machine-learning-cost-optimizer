@@ -86,6 +86,48 @@ The workflow uses the **JSONata** query language for state I/O transformations.
 
 ---
 
+## MCP SageMaker Integration
+
+- **What:** AWS Labs official MCP server for SageMaker
+- **Install:** `uvx awslabs.sagemaker-ai-mcp-server@latest`
+- **Usage:** via Claude Code terminal with `claude` command
+- **Example queries:**
+  - "List all active SageMaker resources"
+  - "How much did SageMaker cost this month?"
+  - "Generate an optimization report"
+
+---
+
+## Security
+
+- IAM least-privilege (separate policies per action)
+- No credentials in code (GitHub Secrets + env vars)
+- S3 reports encrypted (SSE-AES256)
+- `action.py` executes only after explicit approval
+- All actions logged via Lambda Powertools (structured JSON)
+
+---
+
+## Local Development
+
+```bash
+# 1. Set credentials
+$env:AWS_ACCESS_KEY_ID="..."
+$env:AWS_SECRET_ACCESS_KEY="..."
+$env:AWS_DEFAULT_REGION="eu-west-1"
+
+# 2. Run locally
+cd lambda
+python discovery.py   # test scan
+python main.py        # test full analysis
+
+# 3. Deploy
+cd terraform
+terraform apply -var="notification_email=your@email.com"
+```
+
+---
+
 ## What's still to do
 
 ### Human approval before actions
@@ -94,10 +136,8 @@ a human reviews the recommendations first and manually approves which action to
 take. A **Step Functions Wait for Callback** pattern with a task token needs to be
 wired in before the Action state.
 
-### MCP integration
-The plan is to expose this optimizer as an **MCP (Model Context Protocol) server**
-so an AI assistant can query costs, read recommendations, and trigger approved
-actions through natural language.
+### ✅ MCP integration
+AWS Labs SageMaker MCP server installed and working.
 
 ### Carbon footprint reporting
 `calculate_carbon_footprint()` in `discovery.py` currently estimates CO2 per
