@@ -19,6 +19,9 @@ desktop.ini
 # AWS
 .aws/
 
+# MCP (peut contenir des infos sensibles)
+mcp.json
+
 # Claude
 .claude/
 .claude.json*
