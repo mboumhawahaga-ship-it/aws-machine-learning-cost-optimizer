@@ -45,3 +45,4 @@ IntelGraphicsProfiles/
 .gitconfig
 .ssh/
 output.json
+sagemaker-optimization-report-*.md
