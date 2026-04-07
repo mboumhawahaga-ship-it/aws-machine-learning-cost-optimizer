@@ -22,6 +22,72 @@ def get_cloudwatch_client():
     )
 
 
+def get_instance_hourly_price(instance_type, region="eu-west-1"):
+    """
+    Récupère le vrai prix horaire d'une instance SageMaker via l'AWS Pricing API.
+    La Pricing API est uniquement disponible en us-east-1.
+
+    Args:
+        instance_type (str): Type d'instance (ex: ml.t3.medium)
+        region (str): Région AWS (ex: eu-west-1)
+
+    Returns:
+        float: Prix horaire en $/h
+    """
+    # Mapping région → nom lisible pour la Pricing API
+    region_name_map = {
+        "eu-west-1": "EU (Ireland)",
+        "us-east-1": "US East (N. Virginia)",
+        "us-west-2": "US West (Oregon)",
+        "eu-central-1": "EU (Frankfurt)",
+    }
+    location = region_name_map.get(region, "EU (Ireland)")
+
+    # Prix par défaut si l'API échoue
+    default_prices = {
+        "ml.t3.medium": 0.05,
+        "ml.t3.xlarge": 0.20,
+        "ml.p3.2xlarge": 3.83,
+    }
+
+    try:
+        pricing = boto3.client("pricing", region_name="us-east-1")
+        response = pricing.get_products(
+            ServiceCode="AmazonSageMaker",
+            Filters=[
+                {"Type": "TERM_MATCH", "Field": "instanceType", "Value": instance_type},
+                {"Type": "TERM_MATCH", "Field": "location", "Value": location},
+                {"Type": "TERM_MATCH", "Field": "component", "Value": "Notebook"},
+            ],
+            MaxResults=1,
+        )
+
+        price_list = response.get("PriceList", [])
+        if not price_list:
+            logger.warning(f"⚠️ Prix non trouvé pour {instance_type}, fallback utilisé")
+            return default_prices.get(instance_type, 0.10)
+
+        import json as _json
+
+        product = _json.loads(price_list[0])
+        on_demand = product.get("terms", {}).get("OnDemand", {})
+        for term in on_demand.values():
+            for dimension in term.get("priceDimensions", {}).values():
+                price = float(dimension["pricePerUnit"].get("USD", 0))
+                if price > 0:
+                    logger.info(
+                        f"✅ Prix {instance_type} ({location}) : ${price:.4f}/h"
+                    )
+                    return price
+
+        logger.warning(f"⚠️ Prix USD introuvable pour {instance_type}, fallback utilisé")
+        return default_prices.get(instance_type, 0.10)
+
+    except ClientError as e:
+        logger.error(f"❌ Erreur Pricing API pour {instance_type} : {e}")
+        return default_prices.get(instance_type, 0.10)
+
+
 def scan_notebooks():
     """
     Liste tous les notebooks SageMaker avec leur statut,
@@ -38,6 +104,8 @@ def scan_notebooks():
 
         for nb in response["NotebookInstances"]:
             instance_type = nb.get("InstanceType", "inconnu")
+            region = os.environ.get("AWS_REGION", "eu-west-1")
+            hourly_price = get_instance_hourly_price(instance_type, region)
             notebooks.append(
                 {
                     "name": nb["NotebookInstanceName"],
@@ -49,6 +117,8 @@ def scan_notebooks():
                     "carbon_footprint_kg_month": calculate_carbon_footprint(
                         instance_type
                     ),
+                    "hourly_price": hourly_price,
+                    "monthly_cost_estimate": round(hourly_price * 730, 2),
                 }
             )
 

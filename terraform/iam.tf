@@ -37,6 +37,14 @@ resource "aws_iam_role_policy" "lambda_sagemaker_policy" {
         Resource = "*"
       },
       {
+        Sid    = "PricingReadOnly"
+        Effect = "Allow"
+        Action = [
+          "pricing:GetProducts"
+        ]
+        Resource = "*"
+      },
+      {
         Sid    = "S3BucketWriteOnly"
         Effect = "Allow"
         Action = [
