@@ -106,6 +106,10 @@ See a full example: [docs/samples/report-example.md](docs/samples/report-example
 
 **AWS services:** Lambda · SageMaker API · Cost Explorer · Pricing API · S3 · SNS · EventBridge · IAM · CloudWatch
 
+**Observability:** AWS Lambda Powertools (structured JSON logs, correlation IDs)
+
+**AI Integration:** AWS Labs SageMaker MCP server — query resources and costs via natural language directly in the terminal
+
 **What this demonstrates:**
 - Serverless architecture with least-privilege IAM (separate policy per action)
 - Real-time pricing via AWS Pricing API with graceful fallback
