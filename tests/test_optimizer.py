@@ -102,23 +102,30 @@ class TestCostAnalysis:
         Mock SNS to raise an exception and verify that Lambda
         returns success anyway (non-blocking error handling)
         """
-        # Create mock SNS client that raises error
         mock_sns_client = mock.MagicMock()
         mock_sns_client.publish.side_effect = ClientError(
             {"Error": {"Code": "InvalidParameter", "Message": "Invalid topic"}},
             "Publish",
         )
 
-        # Patch get_sns_client to return the mock
-        with mock.patch("main.get_sns_client", return_value=mock_sns_client):
-            # Call handler - should NOT raise exception
+        mock_s3_client = mock.MagicMock()
+        mock_s3_client.put_object.return_value = {}
+
+        mock_costs = {
+            "total_cost": 850.0,
+            "cost_by_resource": {
+                "notebooks": 212.0, "training": 297.0,
+                "endpoints": 170.0, "storage": 42.5, "other": 128.5,
+            },
+        }
+
+        with mock.patch("main.get_sns_client", return_value=mock_sns_client), \
+             mock.patch("main.get_s3_client", return_value=mock_s3_client), \
+             mock.patch("main.get_real_costs", return_value=mock_costs), \
+             mock.patch("main.run_discovery", return_value={"summary": {}}):
             result = handler({}, None)
 
-            # Response should still be successful
-            assert (
-                result["statusCode"] == 200
-            ), "Lambda should return 200 even with SNS error"
-
+            assert result["statusCode"] == 200, "Lambda should return 200 even with SNS error"
             body = json.loads(result["body"])
             assert body["success"] is True, "Handler should return success=true"
             print("✅ SNS failure handled gracefully (non-blocking)")
