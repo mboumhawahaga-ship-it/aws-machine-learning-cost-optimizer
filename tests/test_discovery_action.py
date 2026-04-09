@@ -662,3 +662,77 @@ class TestGenerateRecommendationsIdle:
         recs = main.generate_recommendations(cost_by_resource, None)
         nb_rec = next(r for r in recs if r["type"] == "Notebooks")
         assert nb_rec["priority"] == "High"
+
+
+# ─────────────────────────────────────────────
+# TESTS : is_endpoint_idle()
+# ─────────────────────────────────────────────
+
+class TestIsEndpointIdle:
+    def test_idle_si_zero_invocations(self):
+        from discovery import is_endpoint_idle
+        cw = mock.MagicMock()
+        cw.get_metric_statistics.return_value = {"Datapoints": []}
+        with mock.patch("discovery.get_cloudwatch_client", return_value=cw):
+            result = is_endpoint_idle("test-ep")
+        assert result["is_idle"] is True
+        assert result["total_invocations"] == 0
+
+    def test_actif_si_invocations_presentes(self):
+        from discovery import is_endpoint_idle
+        cw = mock.MagicMock()
+        cw.get_metric_statistics.return_value = {
+            "Datapoints": [{"Sum": 150.0}, {"Sum": 320.0}]
+        }
+        with mock.patch("discovery.get_cloudwatch_client", return_value=cw):
+            result = is_endpoint_idle("test-ep")
+        assert result["is_idle"] is False
+        assert result["total_invocations"] == 470
+
+    def test_fallback_si_erreur_cloudwatch(self):
+        from discovery import is_endpoint_idle
+        cw = mock.MagicMock()
+        cw.get_metric_statistics.side_effect = ClientError(
+            {"Error": {"Code": "AccessDenied", "Message": ""}}, "GetMetricStatistics"
+        )
+        with mock.patch("discovery.get_cloudwatch_client", return_value=cw):
+            result = is_endpoint_idle("test-ep")
+        assert result["is_idle"] is False
+        assert result["total_invocations"] == -1
+
+
+# ─────────────────────────────────────────────
+# TESTS : generate_recommendations() endpoints idle
+# ─────────────────────────────────────────────
+
+class TestGenerateRecommendationsEndpointIdle:
+    def test_priorite_critical_si_endpoints_idle(self):
+        import main
+        cost_by_resource = {
+            "notebooks": 0.0, "training": 0.0,
+            "endpoints": 170.0, "storage": 0.0, "other": 0.0,
+        }
+        discovery = {
+            "notebooks": [],
+            "endpoints": [
+                {"name": "ep-1", "is_running": True, "is_idle": True, "total_invocations": 0},
+            ]
+        }
+        recs = main.generate_recommendations(cost_by_resource, discovery)
+        ep_rec = next(r for r in recs if r["type"] == "Endpoints")
+        assert ep_rec["priority"] == "Critical"
+        assert ep_rec["idle_count"] == 1
+        assert "idle" in ep_rec["issue"].lower()
+
+    def test_priorite_high_si_endpoint_actif(self):
+        import main
+        cost_by_resource = {"notebooks": 0.0, "training": 0.0, "endpoints": 170.0, "storage": 0.0}
+        discovery = {
+            "notebooks": [],
+            "endpoints": [
+                {"name": "ep-1", "is_running": True, "is_idle": False, "total_invocations": 500},
+            ]
+        }
+        recs = main.generate_recommendations(cost_by_resource, discovery)
+        ep_rec = next(r for r in recs if r["type"] == "Endpoints")
+        assert ep_rec["priority"] == "High"

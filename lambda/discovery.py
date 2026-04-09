@@ -23,6 +23,51 @@ def get_cloudwatch_client():
     )
 
 
+def is_endpoint_idle(endpoint_name, hours=24):
+    """
+    Vérifie si un endpoint est idle via CloudWatch Invocations.
+    Un endpoint est considéré idle s'il n'a reçu aucune requête
+    sur les dernières X heures.
+
+    Args:
+        endpoint_name (str): Nom de l'endpoint
+        hours (int): Fenêtre de temps en heures (défaut 24h)
+
+    Returns:
+        dict: {"is_idle": bool, "total_invocations": int, "hours_checked": int}
+    """
+    from datetime import timedelta
+    cw = get_cloudwatch_client()
+
+    try:
+        end_time = datetime.now(timezone.utc)
+        start_time = end_time - timedelta(hours=hours)
+
+        response = cw.get_metric_statistics(
+            Namespace="AWS/SageMaker",
+            MetricName="Invocations",
+            Dimensions=[{"Name": "EndpointName", "Value": endpoint_name}],
+            StartTime=start_time,
+            EndTime=end_time,
+            Period=3600,
+            Statistics=["Sum"],
+        )
+
+        datapoints = response.get("Datapoints", [])
+        total_invocations = int(sum(d["Sum"] for d in datapoints))
+        is_idle = total_invocations == 0
+
+        logger.info(
+            f"{'⚠️' if is_idle else '✅'} {endpoint_name} : "
+            f"{total_invocations} invocations sur {hours}h → {'IDLE' if is_idle else 'actif'}"
+        )
+        return {"is_idle": is_idle, "total_invocations": total_invocations, "hours_checked": hours}
+
+    except ClientError as e:
+        logger.warning(f"⚠️ CloudWatch indisponible pour {endpoint_name} : {e}")
+        return {"is_idle": False, "total_invocations": -1, "hours_checked": hours}
+
+
 def is_notebook_idle(notebook_name, idle_threshold_pct=5.0, hours=24):
     """
     Vérifie si un notebook est idle via CloudWatch CPUUtilization.
@@ -244,6 +289,11 @@ def scan_endpoints():
                         "status": ep["EndpointStatus"],
                         "last_modified": str(ep.get("LastModifiedTime", "")),
                         "is_running": ep["EndpointStatus"] == "InService",
+                        **(
+                            is_endpoint_idle(ep["EndpointName"])
+                            if ep["EndpointStatus"] == "InService"
+                            else {"is_idle": False, "total_invocations": -1, "hours_checked": 24}
+                        ),
                     }
                 )
 

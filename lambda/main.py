@@ -47,10 +47,15 @@ def generate_recommendations(cost_by_resource, discovery=None):
 
     # Notebooks idle détectés via CloudWatch
     idle_notebooks = []
+    idle_endpoints = []
     if discovery:
         idle_notebooks = [
             n for n in discovery.get("notebooks", [])
             if n.get("is_idle") and n.get("is_running")
+        ]
+        idle_endpoints = [
+            e for e in discovery.get("endpoints", [])
+            if e.get("is_idle") and e.get("is_running")
         ]
 
     rules = [
@@ -70,6 +75,12 @@ def generate_recommendations(cost_by_resource, discovery=None):
                     f"Auto-stop {len(idle_notebooks)} idle notebook(s) "
                     f"(avg CPU < 5% over 24h)"
                 )
+            elif name == "Endpoints" and idle_endpoints:
+                priority = "Critical"
+                issue = (
+                    f"Delete {len(idle_endpoints)} idle endpoint(s) "
+                    f"(0 invocations over 24h)"
+                )
             else:
                 issue = get_optimization_issue(name)
 
@@ -82,7 +93,7 @@ def generate_recommendations(cost_by_resource, discovery=None):
                     "effort": effort,
                     "priority": priority,
                     "issue": issue,
-                    "idle_count": len(idle_notebooks) if name == "Notebooks" else 0,
+                    "idle_count": len(idle_notebooks) if name == "Notebooks" else len(idle_endpoints) if name == "Endpoints" else 0,
                 }
             )
 
