@@ -96,7 +96,7 @@ La majorité des erreurs venaient de la différence entre l'environnement local 
 - [x] **RGPD visible** — section dans le rapport Markdown + risque global dans la notification SNS
 - [x] **EU AI Act** — détection `ai-risk-level` + alerte si `human-oversight` absent sur modèle haut risque
 - [ ] **Notebooks idle** — utiliser CloudWatch CPU pour distinguer "tourne" vs "tourne sans personne"
-- [ ] **Tests discovery + action** — ces deux fichiers ne sont pas couverts, le CI peut manquer une régression
+- [x] **Tests discovery + action** — 63 tests, coverage 87% (action 98%, discovery 86%, main 85%)
 - [ ] **README humain** — ajouter pourquoi ce projet existe et ce que ça a appris à construire
 - [ ] **Cost Explorer réel** — remplacer les pourcentages fixes par de vraies données (attendre 24h d'activation)
 - [ ] **CO2 dans les rapports** — les données sont collectées mais jamais affichées
