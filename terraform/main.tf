@@ -96,16 +96,15 @@ resource "aws_lambda_function" "cost_analyzer" {
   role            = aws_iam_role.lambda_role.arn
   handler         = "main.handler"
   source_code_hash = filebase64sha256("../lambda/function.zip")
-  runtime         = "python3.11"
+  runtime         = "python3.12"
   timeout         = 60
   memory_size     = 256
 
   environment {
     variables = {
-      REPORT_BUCKET    = aws_s3_bucket.cost_reports.id
-      PROJECT_NAME     = var.project_name
-      SNS_TOPIC_ARN    = aws_sns_topic.cost_analysis_notifications.arn
-      NOTIFICATION_EMAIL = var.notification_email
+      REPORT_BUCKET = aws_s3_bucket.cost_reports.id
+      PROJECT_NAME  = var.project_name
+      SNS_TOPIC_ARN = aws_sns_topic.cost_analysis_notifications.arn
     }
   }
 
@@ -115,7 +114,7 @@ resource "aws_lambda_function" "cost_analyzer" {
   }
 }
 
-# CloudWatch Log Group pour Lambda
+# CloudWatch Log Group pour Lambda cost_analyzer
 resource "aws_cloudwatch_log_group" "lambda_logs" {
   name              = "/aws/lambda/${aws_lambda_function.cost_analyzer.function_name}"
   retention_in_days = 7
@@ -123,5 +122,58 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
   tags = {
     Project   = var.project_name
     ManagedBy = "Terraform"
+  }
+}
+
+# Lambda Function - Action (exécutée après approbation humaine)
+resource "aws_lambda_function" "cost_action" {
+  filename         = "../lambda/function.zip"
+  function_name    = "${var.project_name}-action"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "action.handler"
+  source_code_hash = filebase64sha256("../lambda/function.zip")
+  runtime          = "python3.12"
+  timeout          = 60
+  memory_size      = 256
+
+  environment {
+    variables = {
+      PROJECT_NAME = var.project_name
+    }
+  }
+
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "Terraform"
+  }
+}
+
+# CloudWatch Log Group pour Lambda cost_action
+resource "aws_cloudwatch_log_group" "lambda_action_logs" {
+  name              = "/aws/lambda/${aws_lambda_function.cost_action.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "Terraform"
+  }
+}
+
+# S3 - Bloquer tout accès public
+resource "aws_s3_bucket_public_access_block" "cost_reports" {
+  bucket = aws_s3_bucket.cost_reports.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# S3 - Versioning des rapports
+resource "aws_s3_bucket_versioning" "cost_reports" {
+  bucket = aws_s3_bucket.cost_reports.id
+
+  versioning_configuration {
+    status = "Enabled"
   }
 }

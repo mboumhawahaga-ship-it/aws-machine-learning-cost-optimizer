@@ -201,9 +201,7 @@ def save_json_report(
         report_data = {
             "metadata": {
                 "report_date": report_date,
-                "generated_at": now.isoformat() + "Z"
-                if not hasattr(datetime, "UTC")
-                else now.isoformat(),
+                "generated_at": now.isoformat(),
                 "version": "1.0.0",
             },
             "summary": {
@@ -311,14 +309,24 @@ def get_real_costs():
     """
     Récupère les coûts SageMaker réels via Cost Explorer.
     Retourne la même structure que MOCK_DATA.
-    En cas d'erreur ou de résultat vide, retourne MOCK_DATA comme fallback.
+
+    Note: Cost Explorer peut nécessiter jusqu'à 24h après activation
+    avant de retourner des données. En cas d'absence de données ou
+    d'erreur, retourne MOCK_DATA comme fallback avec un avertissement.
 
     Returns:
         dict: {"total_cost": float, "cost_by_resource": {...}}
     """
     try:
         today = date.today()
-        start = today.replace(day=1).strftime("%Y-%m-%d")
+        # Cost Explorer requiert start != end — on prend le mois courant
+        # Si on est le 1er du mois, on recule d'un mois pour éviter start == end
+        start_date = today.replace(day=1)
+        if start_date == today:
+            prev_month = today.replace(day=1) - __import__("datetime").timedelta(days=1)
+            start_date = prev_month.replace(day=1)
+
+        start = start_date.strftime("%Y-%m-%d")
         end = today.strftime("%Y-%m-%d")
 
         response = get_ce_client().get_cost_and_usage(
@@ -331,7 +339,10 @@ def get_real_costs():
 
         results = response.get("ResultsByTime", [])
         if not results:
-            logger.warning("⚠️ Cost Explorer : aucun résultat, fallback sur mock data")
+            logger.warning(
+                "⚠️ Cost Explorer : aucun résultat — le service peut nécessiter "
+                "jusqu'à 24h après activation. Fallback sur mock data."
+            )
             return MOCK_DATA
 
         total_cost = sum(
@@ -341,7 +352,10 @@ def get_real_costs():
         )
 
         if total_cost == 0:
-            logger.warning("⚠️ Cost Explorer : coût total à 0, fallback sur mock data")
+            logger.warning(
+                "⚠️ Cost Explorer : coût total à $0 — données peut-être pas encore "
+                "disponibles (délai 24h). Fallback sur mock data."
+            )
             return MOCK_DATA
 
         # Répartition estimée par type de ressource (proportions SageMaker typiques)
@@ -360,7 +374,14 @@ def get_real_costs():
         }
 
     except ClientError as e:
-        logger.error(f"❌ Erreur Cost Explorer : {e}, fallback sur mock data")
+        error_code = e.response["Error"]["Code"]
+        if error_code in ("DataUnavailableException", "RequestExpiredException"):
+            logger.warning(
+                f"⚠️ Cost Explorer non disponible ({error_code}) — "
+                "données pas encore prêtes (délai 24h). Fallback sur mock data."
+            )
+        else:
+            logger.error(f"❌ Erreur Cost Explorer : {e}. Fallback sur mock data.")
         return MOCK_DATA
 
 
@@ -406,7 +427,7 @@ def handler(event, context):
         )
 
         # Generate report date
-        report_date = datetime.now().strftime("%Y-%m-%d")
+        report_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         logger.info(f"💰 Total Cost   : ${total_cost:,.2f}")
         logger.info(f"💸 Total Savings: ${total_savings:,.2f}")

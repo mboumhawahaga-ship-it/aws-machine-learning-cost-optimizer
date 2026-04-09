@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime, timezone
 
@@ -20,6 +21,11 @@ def get_cloudwatch_client():
     return boto3.client(
         "cloudwatch", region_name=os.environ.get("AWS_REGION", "eu-west-1")
     )
+
+
+def get_account_id():
+    """Récupère l'Account ID AWS courant via STS."""
+    return boto3.client("sts").get_caller_identity()["Account"]
 
 
 def get_instance_hourly_price(instance_type, region="eu-west-1"):
@@ -67,9 +73,7 @@ def get_instance_hourly_price(instance_type, region="eu-west-1"):
             logger.warning(f"⚠️ Prix non trouvé pour {instance_type}, fallback utilisé")
             return default_prices.get(instance_type, 0.10)
 
-        import json as _json
-
-        product = _json.loads(price_list[0])
+        product = json.loads(price_list[0])
         on_demand = product.get("terms", {}).get("OnDemand", {})
         for term in on_demand.values():
             for dimension in term.get("priceDimensions", {}).values():
@@ -100,27 +104,26 @@ def scan_notebooks():
     notebooks = []
 
     try:
-        response = sm.list_notebook_instances()
-
-        for nb in response["NotebookInstances"]:
-            instance_type = nb.get("InstanceType", "inconnu")
-            region = os.environ.get("AWS_REGION", "eu-west-1")
-            hourly_price = get_instance_hourly_price(instance_type, region)
-            notebooks.append(
-                {
-                    "name": nb["NotebookInstanceName"],
-                    "status": nb["NotebookInstanceStatus"],
-                    "instance_type": instance_type,
-                    "last_modified": str(nb.get("LastModifiedTime", "")),
-                    # InService = allumé et coûte de l'argent
-                    "is_running": nb["NotebookInstanceStatus"] == "InService",
-                    "carbon_footprint_kg_month": calculate_carbon_footprint(
-                        instance_type
-                    ),
-                    "hourly_price": hourly_price,
-                    "monthly_cost_estimate": round(hourly_price * 730, 2),
-                }
-            )
+        paginator = sm.get_paginator("list_notebook_instances")
+        for page in paginator.paginate():
+            for nb in page["NotebookInstances"]:
+                instance_type = nb.get("InstanceType", "inconnu")
+                region = os.environ.get("AWS_REGION", "eu-west-1")
+                hourly_price = get_instance_hourly_price(instance_type, region)
+                notebooks.append(
+                    {
+                        "name": nb["NotebookInstanceName"],
+                        "status": nb["NotebookInstanceStatus"],
+                        "instance_type": instance_type,
+                        "last_modified": str(nb.get("LastModifiedTime", "")),
+                        "is_running": nb["NotebookInstanceStatus"] == "InService",
+                        "carbon_footprint_kg_month": calculate_carbon_footprint(
+                            instance_type
+                        ),
+                        "hourly_price": hourly_price,
+                        "monthly_cost_estimate": round(hourly_price * 730, 2),
+                    }
+                )
 
         logger.info(f"✅ {len(notebooks)} notebooks trouvés")
         return notebooks
@@ -141,17 +144,17 @@ def scan_endpoints():
     endpoints = []
 
     try:
-        response = sm.list_endpoints()
-
-        for ep in response["Endpoints"]:
-            endpoints.append(
-                {
-                    "name": ep["EndpointName"],
-                    "status": ep["EndpointStatus"],
-                    "last_modified": str(ep.get("LastModifiedTime", "")),
-                    "is_running": ep["EndpointStatus"] == "InService",
-                }
-            )
+        paginator = sm.get_paginator("list_endpoints")
+        for page in paginator.paginate():
+            for ep in page["Endpoints"]:
+                endpoints.append(
+                    {
+                        "name": ep["EndpointName"],
+                        "status": ep["EndpointStatus"],
+                        "last_modified": str(ep.get("LastModifiedTime", "")),
+                        "is_running": ep["EndpointStatus"] == "InService",
+                    }
+                )
 
         logger.info(f"✅ {len(endpoints)} endpoints trouvés")
         return endpoints
@@ -172,17 +175,17 @@ def scan_training_jobs():
     jobs = []
 
     try:
-        response = sm.list_training_jobs(StatusEquals="Completed", MaxResults=50)
-
-        for job in response["TrainingJobSummaries"]:
-            jobs.append(
-                {
-                    "name": job["TrainingJobName"],
-                    "status": job["TrainingJobStatus"],
-                    "creation_time": str(job.get("CreationTime", "")),
-                    "end_time": str(job.get("TrainingEndTime", "")),
-                }
-            )
+        paginator = sm.get_paginator("list_training_jobs")
+        for page in paginator.paginate(StatusEquals="Completed"):
+            for job in page["TrainingJobSummaries"]:
+                jobs.append(
+                    {
+                        "name": job["TrainingJobName"],
+                        "status": job["TrainingJobStatus"],
+                        "creation_time": str(job.get("CreationTime", "")),
+                        "end_time": str(job.get("TrainingEndTime", "")),
+                    }
+                )
 
         logger.info(f"✅ {len(jobs)} training jobs trouvés")
         return jobs
@@ -210,7 +213,7 @@ def check_rgpd_compliance(resource_name, resource_type):
 
     try:
         # Vérifie les tags de la ressource
-        arn = f"arn:aws:sagemaker:{os.environ.get('AWS_REGION', 'eu-west-1')}:::{resource_type}/{resource_name}"
+        arn = f"arn:aws:sagemaker:{os.environ.get('AWS_REGION', 'eu-west-1')}:{get_account_id()}:{resource_type}/{resource_name}"
         tags_response = sm.list_tags(ResourceArn=arn)
         tags = {t["Key"]: t["Value"] for t in tags_response.get("Tags", [])}
 

@@ -1,2 +1,2 @@
 # boto3 is included in AWS Lambda runtime
-aws-lambda-powertools
+aws-lambda-powertools==3.9.1

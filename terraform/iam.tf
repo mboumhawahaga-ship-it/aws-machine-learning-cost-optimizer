@@ -1,3 +1,53 @@
+# IAM Role dédié pour Step Functions
+resource "aws_iam_role" "sfn_role" {
+  name = "${var.project_name}-sfn-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "states.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "Terraform"
+  }
+}
+
+# IAM Policy pour Step Functions - invoke Lambda + publish SNS
+resource "aws_iam_role_policy" "sfn_policy" {
+  name = "${var.project_name}-sfn-policy"
+  role = aws_iam_role.sfn_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "InvokeLambda"
+        Effect = "Allow"
+        Action = ["lambda:InvokeFunction"]
+        Resource = [
+          aws_lambda_function.cost_analyzer.arn,
+          aws_lambda_function.cost_action.arn
+        ]
+      },
+      {
+        Sid      = "PublishSNS"
+        Effect   = "Allow"
+        Action   = ["sns:Publish"]
+        Resource = aws_sns_topic.cost_analysis_notifications.arn
+      }
+    ]
+  })
+}
+
 # IAM Policy pour Lambda - Least Privilege
 resource "aws_iam_role_policy" "lambda_sagemaker_policy" {
   name = "${var.project_name}-lambda-sagemaker-policy"
@@ -14,6 +64,7 @@ resource "aws_iam_role_policy" "lambda_sagemaker_policy" {
           "sagemaker:ListTrainingJobs",
           "sagemaker:ListEndpoints",
           "sagemaker:DescribeNotebookInstance",
+          "sagemaker:ListTags",
           "sagemaker:StopNotebookInstance",
           "sagemaker:DeleteEndpoint"
         ]

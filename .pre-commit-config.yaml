@@ -1,7 +1,24 @@
 repos:
+  # Linting & formatting Python
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.8
+    rev: v0.11.9
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+
+  # Détection de secrets (clés, tokens, Account IDs, ARN hardcodés)
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ["--baseline", ".secrets.baseline"]
+        exclude: .secrets.baseline
+
+  # Sécurité IaC — désactivé temporairement (DLL Windows bloquée par politique de sécurité)
+  # Réactiver quand l'environnement Windows le permet
+  # - repo: https://github.com/bridgecrewio/checkov
+  #   rev: "3.2.0"
+  #   hooks:
+  #     - id: checkov
+  #       args: ["--directory", "terraform", "--quiet"]
