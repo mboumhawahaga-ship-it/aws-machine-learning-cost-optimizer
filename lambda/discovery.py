@@ -231,6 +231,91 @@ def scan_training_jobs():
         return []
 
 
+def check_eu_ai_act_compliance(endpoint_name):
+    """
+    Vérifie la conformité EU AI Act d'un endpoint SageMaker (modèle en production).
+
+    Tags attendus :
+      - ai-risk-level       : high | limited | minimal
+      - human-oversight     : enabled | disabled
+      - model-purpose       : description du cas d'usage (Art. 13)
+      - conformity-assessment : done | pending | not-required (Art. 9)
+
+    Pénalités EU AI Act :
+      - Jusqu'à 35M€ ou 7% CA mondial pour systèmes haut risque non conformes
+      - Jusqu'à 15M€ ou 3% CA pour autres violations
+
+    Returns:
+        dict: Statut conformité EU AI Act et alertes par article
+    """
+    sm = get_sagemaker_client()
+    alerts = []
+
+    try:
+        region = os.environ.get("AWS_REGION", "eu-west-1")
+        arn = f"arn:aws:sagemaker:{region}:{get_account_id()}:endpoint/{endpoint_name}"
+        tags_response = sm.list_tags(ResourceArn=arn)
+        tags = {t["Key"]: t["Value"] for t in tags_response.get("Tags", [])}
+
+        ai_risk = tags.get("ai-risk-level", "unknown")
+
+        # Art. 9 — classification du risque obligatoire
+        if ai_risk == "unknown":
+            alerts.append("[Art. 9] Tag 'ai-risk-level' manquant — risque non classifié")
+
+        # Art. 14 — supervision humaine obligatoire pour les systèmes haut risque
+        if ai_risk == "high" and tags.get("human-oversight") != "enabled":
+            alerts.append("[Art. 14] Modèle haut risque sans human-oversight: enabled — pénalité jusqu'à 35M€")
+
+        # Art. 9 — évaluation de conformité requise pour haut risque
+        if ai_risk == "high" and "conformity-assessment" not in tags:
+            alerts.append("[Art. 9] Tag 'conformity-assessment' manquant sur modèle haut risque")
+
+        # Art. 13 — transparence et documentation du cas d'usage
+        if "model-purpose" not in tags:
+            alerts.append("[Art. 13] Tag 'model-purpose' manquant — cas d'usage non documenté")
+
+        if not alerts:
+            alerts.append("Conforme EU AI Act")
+
+    except ClientError:
+        alerts.append("Impossible de vérifier les tags EU AI Act")
+        ai_risk = "unknown"
+
+    return {
+        "endpoint": endpoint_name,
+        "ai_risk_level": ai_risk,
+        "human_oversight": tags.get("human-oversight", "not-set") if "tags" in dir() else "unknown",
+        "alerts": alerts,
+        "compliant": not alerts or (len(alerts) == 1 and "Conforme" in alerts[0]),
+    }
+
+
+def _build_eu_ai_act_compliance(endpoints):
+    """Évalue la conformité EU AI Act sur tous les endpoints."""
+    if not endpoints:
+        return {"endpoints": [], "global_status": "N/A", "high_risk_count": 0}
+
+    results = [check_eu_ai_act_compliance(e["name"]) for e in endpoints]
+
+    high_risk_non_compliant = [r for r in results if r["ai_risk_level"] == "high" and not r["compliant"]]
+    unknown_risk = [r for r in results if r["ai_risk_level"] == "unknown"]
+
+    if high_risk_non_compliant:
+        global_status = "Non-Compliant"
+    elif unknown_risk:
+        global_status = "Incomplete"
+    else:
+        global_status = "Compliant"
+
+    logger.info(f"✅ EU AI Act scan : {len(results)} endpoints, statut global = {global_status}")
+    return {
+        "endpoints": results,
+        "global_status": global_status,
+        "high_risk_count": len([r for r in results if r["ai_risk_level"] == "high"]),
+    }
+
+
 def check_rgpd_compliance(resource_name, resource_type):
     """
     Vérifie la conformité RGPD basique d'une ressource.
@@ -362,6 +447,7 @@ def run_discovery():
         "endpoints": endpoints,
         "training_jobs": training_jobs,
         "rgpd_compliance": _build_rgpd_compliance(notebooks, endpoints),
+        "eu_ai_act_compliance": _build_eu_ai_act_compliance(endpoints),
     }
 
     logger.info(

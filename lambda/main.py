@@ -97,7 +97,7 @@ def get_optimization_issue(resource_type):
     return issues.get(resource_type, "Review resource configuration")
 
 
-def generate_markdown_report(total_cost, total_savings, savings_pct, recs, report_date, rgpd_data=None):
+def generate_markdown_report(total_cost, total_savings, savings_pct, recs, report_date, rgpd_data=None, eu_ai_act_data=None):
     """
     Génère un rapport Markdown avec résumé exécutif et recommandations.
 
@@ -168,6 +168,29 @@ def generate_markdown_report(total_cost, total_savings, savings_pct, recs, repor
                 markdown += f"| {r['resource']} | {r['type']} | {r['rgpd_risk']} | {alerts} |\n"
         else:
             markdown += "All scanned resources have compliant GDPR tags.\n"
+
+    # Section EU AI Act
+    if eu_ai_act_data and eu_ai_act_data.get("endpoints"):
+        status = eu_ai_act_data.get("global_status", "N/A")
+        status_emoji = {"Compliant": "✅", "Incomplete": "⚠️", "Non-Compliant": "🔴", "N/A": "—"}.get(status, "❓")
+        high_risk = eu_ai_act_data.get("high_risk_count", 0)
+
+        markdown += f"\n---\n\n## EU AI Act Compliance\n\n"
+        markdown += f"**Global Status: {status_emoji} {status}**"
+        if high_risk > 0:
+            markdown += f" | **High-Risk Models: {high_risk}**"
+        markdown += "\n\n"
+        markdown += "> Penalties up to \u20ac35M or 7% of global turnover for non-compliant high-risk AI systems.\n\n"
+
+        non_compliant = [r for r in eu_ai_act_data["endpoints"] if not r["compliant"]]
+        if non_compliant:
+            markdown += "| Endpoint | Risk Level | Human Oversight | Alerts |\n"
+            markdown += "|----------|------------|-----------------|--------|\n"
+            for r in non_compliant:
+                alerts = " / ".join(r["alerts"])
+                markdown += f"| {r['endpoint']} | {r['ai_risk_level']} | {r['human_oversight']} | {alerts} |\n"
+        else:
+            markdown += "All endpoints are EU AI Act compliant.\n"
 
     return markdown
 
@@ -290,7 +313,7 @@ def save_markdown_report(bucket_name, markdown_content, report_date):
 
 
 def send_sns_notification(
-    sns_topic_arn, total_savings, savings_pct, recommendation_count, markdown_s3_url, rgpd_risk=None
+    sns_topic_arn, total_savings, savings_pct, recommendation_count, markdown_s3_url, rgpd_risk=None, eu_ai_act_status=None
 ):
     """
     Envoie une notification SNS avec un résumé des économies identifiées.
@@ -310,7 +333,12 @@ def send_sns_notification(
         )
         if rgpd_risk:
             risk_emoji = {"Low": "✅", "Medium": "⚠️", "High": "🔴"}.get(rgpd_risk, "❓")
-            message += f"GDPR Risk: {risk_emoji} {rgpd_risk}\n\n"
+            message += f"GDPR Risk: {risk_emoji} {rgpd_risk}\n"
+        if eu_ai_act_status:
+            status_emoji = {"Compliant": "✅", "Incomplete": "⚠️", "Non-Compliant": "🔴"}.get(eu_ai_act_status, "❓")
+            message += f"EU AI Act: {status_emoji} {eu_ai_act_status}\n"
+        if rgpd_risk or eu_ai_act_status:
+            message += "\n"
         message += f"Full report: {markdown_s3_url}"
 
         response = get_sns_client().publish(
@@ -435,6 +463,7 @@ def handler(event, context):
             logger.info("📊 Using mock data (MOCK_MODE=true)")
             data = MOCK_DATA
             rgpd_data = None
+            eu_ai_act_data = None
         else:
             logger.info("📊 Fetching real costs from Cost Explorer...")
             data = get_real_costs()
@@ -442,6 +471,7 @@ def handler(event, context):
             discovery = run_discovery()
             data["discovery"] = discovery
             rgpd_data = discovery.get("rgpd_compliance")
+            eu_ai_act_data = discovery.get("eu_ai_act_compliance")
 
         # Generate recommendations (sorted by ROI/Priority)
         recs = generate_recommendations(data["cost_by_resource"])
@@ -471,7 +501,7 @@ def handler(event, context):
 
             # 2. Generate and save Markdown report
             markdown_content = generate_markdown_report(
-                total_cost, total_savings, savings_pct, recs, report_date, rgpd_data
+                total_cost, total_savings, savings_pct, recs, report_date, rgpd_data, eu_ai_act_data
             )
             markdown_url = save_markdown_report(
                 report_bucket, markdown_content, report_date
@@ -481,7 +511,9 @@ def handler(event, context):
             if sns_topic_arn:
                 send_sns_notification(
                     sns_topic_arn, total_savings, savings_pct, len(recs),
-                    markdown_url, rgpd_data.get("global_risk") if rgpd_data else None
+                    markdown_url,
+                    rgpd_data.get("global_risk") if rgpd_data else None,
+                    eu_ai_act_data.get("global_status") if eu_ai_act_data else None,
                 )
             else:
                 logger.warning(
