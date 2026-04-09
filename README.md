@@ -196,10 +196,49 @@ claude
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    EB["⏰ EventBridge\nEvery Monday 8:00 UTC"]
+    SF["🔄 Step Functions\nWorkflow Orchestrator"]
+    LA["🔍 Lambda — Analyzer\nmain.py + discovery.py"]
+    SM["☁️ SageMaker API\nNotebooks · Studio · Endpoints · Training"]
+    CW["📊 CloudWatch Metrics\nCPUUtilization · Invocations"]
+    CE["💰 Cost Explorer\nReal monthly spend"]
+    PA["🏷️ Pricing API\nLive instance prices"]
+    S3["🗄️ S3\nJSON + Markdown reports"]
+    SNS["📧 SNS\nEmail notification"]
+    AP["👤 Human Approval\nwaitForTaskToken"]
+    ACT["⚡ Lambda — Action\naction.py"]
+
+    EB --> SF
+    SF --> LA
+    LA --> SM
+    LA --> CW
+    LA --> CE
+    LA --> PA
+    LA --> S3
+    S3 --> SNS
+    SNS --> AP
+    AP -->|approved| ACT
+    ACT --> SM
+
+    style EB fill:#FF9900,color:#000
+    style SF fill:#E7157B,color:#fff
+    style LA fill:#3F8624,color:#fff
+    style SM fill:#1A9C3E,color:#fff
+    style CW fill:#E7157B,color:#fff
+    style CE fill:#E7157B,color:#fff
+    style S3 fill:#3F8624,color:#fff
+    style SNS fill:#E7157B,color:#fff
+    style AP fill:#232F3E,color:#fff
+    style ACT fill:#3F8624,color:#fff
+```
+
 ```
 lambda/
   main.py        ← Cost analysis, report generation, SNS notification
   discovery.py   ← SageMaker scanner (notebooks, Studio, endpoints, training jobs)
+                    CloudWatch idle detection (CPU + Invocations)
                     GDPR compliance checks
                     EU AI Act compliance checks
   action.py      ← Stop notebook / delete endpoint (after human approval only)
@@ -214,7 +253,7 @@ terraform/
 tests/
   test_main.py              ← Recommendations logic, handler
   test_optimizer.py         ← Integration tests, JSON schema, SNS resilience
-  test_discovery_action.py  ← AWS mocked scans, GDPR, EU AI Act, actions
+  test_discovery_action.py  ← AWS mocked scans, GDPR, EU AI Act, CloudWatch, actions
 ```
 
 Full architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
@@ -230,7 +269,7 @@ Full architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 | Infrastructure | Terraform · S3 remote state · DynamoDB locking |
 | CI/CD | GitHub Actions · OIDC auth · Checkov IaC scan |
 | Observability | AWS Lambda Powertools (structured JSON logs) |
-| Testing | pytest · unittest.mock · moto · 87% coverage |
+| Testing | pytest · unittest.mock · moto · 88% coverage · 75 tests |
 | Security | detect-secrets · pre-commit hooks · least-privilege IAM |
 | AI Integration | AWS Labs SageMaker MCP server |
 
