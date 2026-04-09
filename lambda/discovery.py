@@ -23,6 +23,58 @@ def get_cloudwatch_client():
     )
 
 
+def is_notebook_idle(notebook_name, idle_threshold_pct=5.0, hours=24):
+    """
+    Vérifie si un notebook est idle via CloudWatch CPUUtilization.
+    Un notebook est considéré idle si son CPU moyen est sous le seuil
+    sur les dernières X heures.
+
+    Args:
+        notebook_name (str): Nom du notebook
+        idle_threshold_pct (float): Seuil CPU en % (défaut 5%)
+        hours (int): Fenêtre de temps en heures (défaut 24h)
+
+    Returns:
+        dict: {"is_idle": bool, "avg_cpu": float, "hours_checked": int}
+    """
+    from datetime import timedelta
+    cw = get_cloudwatch_client()
+
+    try:
+        end_time = datetime.now(timezone.utc)
+        start_time = end_time - timedelta(hours=hours)
+
+        response = cw.get_metric_statistics(
+            Namespace="AWS/SageMaker",
+            MetricName="CPUUtilization",
+            Dimensions=[{"Name": "NotebookInstanceName", "Value": notebook_name}],
+            StartTime=start_time,
+            EndTime=end_time,
+            Period=3600,  # 1 point par heure
+            Statistics=["Average"],
+        )
+
+        datapoints = response.get("Datapoints", [])
+
+        if not datapoints:
+            # Pas de métriques = notebook allumé mais jamais utilisé
+            logger.info(f"⚠️ {notebook_name} : aucune métrique CPU → considéré idle")
+            return {"is_idle": True, "avg_cpu": 0.0, "hours_checked": hours}
+
+        avg_cpu = sum(d["Average"] for d in datapoints) / len(datapoints)
+        is_idle = avg_cpu < idle_threshold_pct
+
+        logger.info(
+            f"{'⚠️' if is_idle else '✅'} {notebook_name} : "
+            f"CPU moyen = {avg_cpu:.1f}% sur {hours}h → {'IDLE' if is_idle else 'actif'}"
+        )
+        return {"is_idle": is_idle, "avg_cpu": round(avg_cpu, 1), "hours_checked": hours}
+
+    except ClientError as e:
+        logger.warning(f"⚠️ CloudWatch indisponible pour {notebook_name} : {e}")
+        return {"is_idle": False, "avg_cpu": -1.0, "hours_checked": hours}
+
+
 def get_account_id():
     """Récupère l'Account ID AWS courant via STS."""
     return boto3.client("sts").get_caller_identity()["Account"]
@@ -153,11 +205,14 @@ def scan_notebooks():
                         "instance_type": instance_type,
                         "last_modified": str(nb.get("LastModifiedTime", "")),
                         "is_running": nb["NotebookInstanceStatus"] == "InService",
-                        "carbon_footprint_kg_month": calculate_carbon_footprint(
-                            instance_type
-                        ),
+                        "carbon_footprint_kg_month": calculate_carbon_footprint(instance_type),
                         "hourly_price": hourly_price,
                         "monthly_cost_estimate": round(hourly_price * 730, 2),
+                        **(
+                            is_notebook_idle(nb["NotebookInstanceName"])
+                            if nb["NotebookInstanceStatus"] == "InService"
+                            else {"is_idle": False, "avg_cpu": -1.0, "hours_checked": 24}
+                        ),
                     }
                 )
 

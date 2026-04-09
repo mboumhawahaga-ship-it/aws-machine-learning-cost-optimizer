@@ -38,25 +38,21 @@ MOCK_DATA = {
 }
 
 
-def generate_recommendations(cost_by_resource):
+def generate_recommendations(cost_by_resource, discovery=None):
     """
     Génère les recommandations d'économies pour chaque ressource SageMaker.
-
-    Args:
-        cost_by_resource (dict): Dictionnaire des coûts par type de ressource
-
-    Returns:
-        list: Liste de dictionnaires contenant les recommandations avec fields:
-            - type (str): Catégorie de ressource (Notebooks, Training, etc.)
-            - cost (float): Coût mensuel actuel
-            - savings (float): Montant des économies potentielles
-            - savings_pct (int): Pourcentage d'économies
-            - effort (str): Niveau d'effort déployé (Low, Medium, High)
-            - priority (str): Priorité basée sur ROI (Critical, High, Medium)
+    Si discovery est fourni, les notebooks idle (CPU < 5%) sont priorisés Critical.
     """
     recs = []
 
-    # Règles d'optimisation : (clé, % savings, nom, seuil min $, effort, priority)
+    # Notebooks idle détectés via CloudWatch
+    idle_notebooks = []
+    if discovery:
+        idle_notebooks = [
+            n for n in discovery.get("notebooks", [])
+            if n.get("is_idle") and n.get("is_running")
+        ]
+
     rules = [
         ("notebooks", 0.75, "Notebooks", 20, "Low", "High"),
         ("training", 0.70, "Training", 50, "Medium", "Critical"),
@@ -67,6 +63,16 @@ def generate_recommendations(cost_by_resource):
     for key, pct, name, seuil, effort, priority in rules:
         cost = cost_by_resource.get(key, 0)
         if cost > seuil:
+            # Si des notebooks idle sont détectés, on monte la priorité à Critical
+            if name == "Notebooks" and idle_notebooks:
+                priority = "Critical"
+                issue = (
+                    f"Auto-stop {len(idle_notebooks)} idle notebook(s) "
+                    f"(avg CPU < 5% over 24h)"
+                )
+            else:
+                issue = get_optimization_issue(name)
+
             recs.append(
                 {
                     "type": name,
@@ -75,14 +81,13 @@ def generate_recommendations(cost_by_resource):
                     "savings_pct": round(pct * 100),
                     "effort": effort,
                     "priority": priority,
-                    "issue": get_optimization_issue(name),
+                    "issue": issue,
+                    "idle_count": len(idle_notebooks) if name == "Notebooks" else 0,
                 }
             )
 
-    # Trier par ROI (priority-based sorting)
     priority_score = {"Critical": 1, "High": 2, "Medium": 3}
     recs.sort(key=lambda x: (priority_score.get(x["priority"], 99), -x["savings"]))
-
     return recs
 
 
@@ -474,7 +479,8 @@ def handler(event, context):
             eu_ai_act_data = discovery.get("eu_ai_act_compliance")
 
         # Generate recommendations (sorted by ROI/Priority)
-        recs = generate_recommendations(data["cost_by_resource"])
+        discovery = data.get("discovery")
+        recs = generate_recommendations(data["cost_by_resource"], discovery)
         total_cost = data["total_cost"]
         total_savings = sum(r["savings"] for r in recs)
         savings_pct = (

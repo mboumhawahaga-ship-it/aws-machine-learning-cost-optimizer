@@ -571,3 +571,94 @@ class TestGenerateMarkdownReportCompliance:
         assert "EU AI Act" in md
         assert "35M" in md
         assert "Non-Compliant" in md
+
+
+# ─────────────────────────────────────────────
+# TESTS : is_notebook_idle()
+# ─────────────────────────────────────────────
+
+class TestIsNotebookIdle:
+    def test_idle_si_cpu_sous_seuil(self):
+        from discovery import is_notebook_idle
+        cw = mock.MagicMock()
+        cw.get_metric_statistics.return_value = {
+            "Datapoints": [{"Average": 2.0}, {"Average": 1.5}, {"Average": 3.0}]
+        }
+        with mock.patch("discovery.get_cloudwatch_client", return_value=cw):
+            result = is_notebook_idle("test-nb")
+        assert result["is_idle"] is True
+        assert result["avg_cpu"] == 2.2
+
+    def test_actif_si_cpu_au_dessus_seuil(self):
+        from discovery import is_notebook_idle
+        cw = mock.MagicMock()
+        cw.get_metric_statistics.return_value = {
+            "Datapoints": [{"Average": 45.0}, {"Average": 60.0}]
+        }
+        with mock.patch("discovery.get_cloudwatch_client", return_value=cw):
+            result = is_notebook_idle("test-nb")
+        assert result["is_idle"] is False
+        assert result["avg_cpu"] == 52.5
+
+    def test_idle_si_aucune_metrique(self):
+        from discovery import is_notebook_idle
+        cw = mock.MagicMock()
+        cw.get_metric_statistics.return_value = {"Datapoints": []}
+        with mock.patch("discovery.get_cloudwatch_client", return_value=cw):
+            result = is_notebook_idle("test-nb")
+        assert result["is_idle"] is True
+        assert result["avg_cpu"] == 0.0
+
+    def test_fallback_si_erreur_cloudwatch(self):
+        from discovery import is_notebook_idle
+        cw = mock.MagicMock()
+        cw.get_metric_statistics.side_effect = ClientError(
+            {"Error": {"Code": "AccessDenied", "Message": ""}}, "GetMetricStatistics"
+        )
+        with mock.patch("discovery.get_cloudwatch_client", return_value=cw):
+            result = is_notebook_idle("test-nb")
+        assert result["is_idle"] is False
+        assert result["avg_cpu"] == -1.0
+
+
+# ─────────────────────────────────────────────
+# TESTS : generate_recommendations() avec idle detection
+# ─────────────────────────────────────────────
+
+class TestGenerateRecommendationsIdle:
+    def test_priorite_critical_si_notebooks_idle(self):
+        import main
+        cost_by_resource = {
+            "notebooks": 212.0, "training": 0.0,
+            "endpoints": 0.0, "storage": 0.0, "other": 0.0,
+        }
+        discovery = {
+            "notebooks": [
+                {"name": "nb-1", "is_running": True, "is_idle": True, "avg_cpu": 1.2},
+                {"name": "nb-2", "is_running": True, "is_idle": True, "avg_cpu": 0.5},
+            ]
+        }
+        recs = main.generate_recommendations(cost_by_resource, discovery)
+        nb_rec = next(r for r in recs if r["type"] == "Notebooks")
+        assert nb_rec["priority"] == "Critical"
+        assert nb_rec["idle_count"] == 2
+        assert "idle" in nb_rec["issue"].lower()
+
+    def test_priorite_high_si_aucun_notebook_idle(self):
+        import main
+        cost_by_resource = {"notebooks": 212.0, "training": 0.0, "endpoints": 0.0, "storage": 0.0}
+        discovery = {
+            "notebooks": [
+                {"name": "nb-1", "is_running": True, "is_idle": False, "avg_cpu": 45.0},
+            ]
+        }
+        recs = main.generate_recommendations(cost_by_resource, discovery)
+        nb_rec = next(r for r in recs if r["type"] == "Notebooks")
+        assert nb_rec["priority"] == "High"
+
+    def test_sans_discovery_comportement_normal(self):
+        import main
+        cost_by_resource = {"notebooks": 212.0, "training": 0.0, "endpoints": 0.0, "storage": 0.0}
+        recs = main.generate_recommendations(cost_by_resource, None)
+        nb_rec = next(r for r in recs if r["type"] == "Notebooks")
+        assert nb_rec["priority"] == "High"
