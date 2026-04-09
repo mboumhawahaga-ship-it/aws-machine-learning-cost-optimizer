@@ -93,6 +93,10 @@ La majorité des erreurs venaient de la différence entre l'environnement local 
 
 ## À faire
 
-- [ ] Cost Explorer réel — `GroupBy USAGE_TYPE` au lieu des pourcentages fixes (attendre 24h d'activation)
-- [ ] CO2 dans les rapports — les données sont collectées mais pas incluses dans le Markdown
-- [ ] Cache STS — `get_account_id()` appelle STS à chaque ressource, ajouter un cache module-level
+- [ ] **RGPD visible** — les résultats existent mais n'apparaissent pas dans le mail ni le rapport
+- [ ] **EU AI Act** — détecter les modèles sans supervision humaine déclarée (différenciateur portfolio)
+- [ ] **Notebooks idle** — utiliser CloudWatch CPU pour distinguer "tourne" vs "tourne sans personne"
+- [ ] **Tests discovery + action** — ces deux fichiers ne sont pas couverts, le CI peut manquer une régression
+- [ ] **README humain** — ajouter pourquoi ce projet existe et ce que ça a appris à construire
+- [ ] **Cost Explorer réel** — remplacer les pourcentages fixes par de vraies données (attendre 24h d'activation)
+- [ ] **CO2 dans les rapports** — les données sont collectées mais jamais affichées
