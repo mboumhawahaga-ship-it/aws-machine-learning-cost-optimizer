@@ -69,3 +69,17 @@ Le badge visiteur temporaire pour GitHub Actions. Au lieu de laisser une clé AW
 
 ## MCP (Model Context Protocol)
 Le traducteur entre toi et AWS. Il permet de poser des questions en langage naturel ("quels notebooks tournent en ce moment ?") et obtenir une vraie réponse depuis AWS — sans écrire de code.
+
+---
+
+## Ressources SageMaker avancées
+*Découvertes en explorant l'écosystème SageMaker utilisé en entreprise.*
+
+### Studio Domains
+L'environnement de travail partagé de toute l'équipe data. Chaque data scientist a son espace dedans — tu ouvres ton navigateur, tu tombes sur Studio, tu codes, tu entraînes, tu déploies. Le domaine lui-même a des coûts fixes qui tournent même quand personne ne travaille.
+
+### Feature Store
+La base de données centralisée des variables ML de l'entreprise. Au lieu que chaque équipe recalcule les mêmes données d'entrée, elles sont calculées une fois et partagées par tous les modèles. C'est du stockage qui coûte en permanence et qui grossit vite.
+
+### Model Registry
+Le catalogue officiel des modèles en production. Chaque modèle est versionné, documenté et validé avant de déployer. En entreprise c'est souvent obligatoire pour la conformité — il faut savoir quel modèle tourne, depuis quand, qui l'a approuvé. Lien direct avec l'EU AI Act.
