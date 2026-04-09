@@ -8,23 +8,24 @@ optimization actions (with human approval). Everything runs serverless on AWS.
 ## How it works — big picture
 
 ```
-EventBridge (weekly cron)
+EventBridge (weekly cron — every Monday 8:00 UTC)
         |
         v
  Step Functions Workflow
         |
-        |---> [1] Scan-SageMaker     (Lambda: ml-cost-optimizer-analyzer)
+        |---> [1] Scan-SageMaker        (Lambda: ml-cost-optimizer-analyzer)
         |           Scans all SageMaker resources + fetches real costs
-        |
-        |---> [2] Analyse-Rapport    (Lambda: ml-cost-optimizer-analyzer)
-        |           Generates recommendations sorted by ROI
         |           Saves JSON + Markdown reports to S3
         |
-        |---> [3] Action             (Lambda: ml-cost-optimizer-action)
-        |           Executes approved actions (stop notebook / delete endpoint)
+        |---> [2] Attente-Approbation   (SNS waitForTaskToken)
+        |           Sends report to team — workflow pauses
+        |           Resumes only when a human sends back the task token
         |
-        |---> [4] Notification       (SNS)
-                    Sends email/SMS summary to subscribers
+        |---> [3] Action                (Lambda: ml-cost-optimizer-action)
+        |           Executes the approved action (stop notebook / delete endpoint)
+        |
+        |---> [4] Notification          (SNS)
+                    Sends final confirmation email to subscribers
 ```
 
 ---
@@ -32,42 +33,42 @@ EventBridge (weekly cron)
 ## Lambda files
 
 ### `lambda/discovery.py`
-Scans all live SageMaker resources via boto3:
-- **`scan_notebooks()`** — lists notebook instances with status, instance type, and carbon footprint estimate
-- **`scan_endpoints()`** — lists endpoints with status
-- **`scan_training_jobs()`** — lists last 50 completed training jobs
-- **`check_rgpd_compliance()`** — checks GDPR tags (`owner`, `data-classification`, `expiration-date`) on each resource
-- **`calculate_carbon_footprint()`** — estimates CO2 in kg/month based on instance type
-- **`run_discovery()`** — calls all of the above and returns a single report dict including GDPR compliance summary
+Scans all live SageMaker resources via boto3 with full pagination:
+- `scan_notebooks()` — lists all notebook instances with status, instance type, hourly price (live from Pricing API), and carbon footprint estimate
+- `scan_endpoints()` — lists all endpoints with status
+- `scan_training_jobs()` — lists all completed training jobs
+- `check_rgpd_compliance()` — checks GDPR tags (`owner`, `data-classification`, `expiration-date`) on each resource using correct ARN format via STS
+- `calculate_carbon_footprint()` — estimates CO2 in kg/month based on instance type
+- `run_discovery()` — orchestrates all scans and returns a single report dict including GDPR compliance summary
 
 ### `lambda/main.py`
-The main analysis Lambda. Entry point for steps 1 and 2 in the workflow:
-- **`get_real_costs()`** — queries AWS Cost Explorer for real SageMaker spend this month, falls back to mock data on error
-- **`generate_recommendations()`** — produces a prioritized list of savings opportunities (notebooks, training, endpoints, storage)
-- **`generate_markdown_report()`** / **`save_markdown_report()`** — builds and uploads a Markdown report to S3
-- **`save_json_report()`** — uploads a structured JSON report to S3
-- **`send_sns_notification()`** — sends a savings summary via SNS (non-blocking)
-- **`handler()`** — Lambda entry point: orchestrates the full analysis flow
+Main analysis Lambda — entry point for step 1 in the workflow:
+- `get_real_costs()` — queries AWS Cost Explorer for real SageMaker spend this month. Handles the 24h activation delay gracefully with clear warning messages. Falls back to mock data on error or empty results
+- `generate_recommendations()` — produces a prioritized list of savings opportunities (notebooks, training, endpoints, storage) sorted by ROI
+- `generate_markdown_report()` / `save_markdown_report()` — builds and uploads a Markdown report to S3
+- `save_json_report()` — uploads a structured JSON report to S3 with strict schema
+- `send_sns_notification()` — sends a savings summary via SNS (non-blocking)
+- `handler()` — Lambda entry point: orchestrates the full analysis flow
 
 ### `lambda/action.py`
-Executes a single action on a SageMaker resource. **Only runs after human approval.**
-- **`stop_notebook(name)`** — stops a notebook instance (no deletion)
-- **`delete_endpoint(name)`** — deletes an inactive endpoint
-- **`handler(event)`** — reads `action_type` and `resource_name` from the event, routes to the right function, returns 200 or 500
+Executes a single action on a SageMaker resource. **Only runs after explicit human approval via task token.**
+- `stop_notebook(name)` — stops a notebook instance (no deletion)
+- `delete_endpoint(name)` — deletes an inactive endpoint
+- `handler(event)` — reads `action_type` and `resource_name` from the event, routes to the right function
 
 ---
 
-## Step Functions workflow — step by step
+## Step Functions workflow
 
-| Step | State | Lambda | What happens |
-|------|-------|--------|--------------|
-| 1 | Scan-SageMaker | `ml-cost-optimizer-analyzer` | Scans resources, fetches real costs from Cost Explorer |
-| 2 | Analyse-Rapport | `ml-cost-optimizer-analyzer` | Generates recommendations, saves reports to S3 |
-| 3 | Action | `ml-cost-optimizer-action` | Executes an approved action (stop/delete) |
-| 4 | Notification | SNS (direct integration) | Publishes summary to the SNS topic |
+| Step | State | Resource | What happens |
+|------|-------|----------|--------------|
+| 1 | Scan-SageMaker | Lambda: analyzer | Scans resources, fetches costs, saves reports to S3 |
+| 2 | Attente-Approbation | SNS waitForTaskToken | Pauses workflow — resumes only after human approval |
+| 3 | Action | Lambda: action | Executes the approved action (stop/delete) |
+| 4 | Notification | SNS direct | Sends final confirmation to subscribers |
 
-Each Lambda step retries up to 3 times with exponential backoff on AWS transient errors.
-The workflow uses the **JSONata** query language for state I/O transformations.
+Each Lambda step retries up to 3 times with exponential backoff + full jitter on AWS transient errors.
+The workflow uses **JSONata** for state I/O transformations.
 
 ---
 
@@ -76,35 +77,71 @@ The workflow uses the **JSONata** query language for state I/O transformations.
 | Service | Why |
 |---------|-----|
 | **Lambda** | Serverless compute — no infrastructure to manage |
-| **Step Functions** | Orchestrates the multi-step workflow with built-in retries and state |
-| **SageMaker API** | Source of truth for all ML resources (notebooks, endpoints, training jobs) |
+| **Step Functions** | Orchestrates the multi-step workflow with retries, state, and human approval |
+| **SageMaker API** | Source of truth for all ML resources |
 | **Cost Explorer** | Retrieves real spend data for the current month |
-| **S3** | Stores JSON and Markdown reports for audit and history |
-| **SNS** | Sends notifications (email/SMS) when analysis completes |
-| **EventBridge** | Triggers the workflow on a weekly schedule |
-| **IAM** | Least-privilege roles — each Lambda only has the permissions it needs |
+| **Pricing API** | Fetches live instance prices (always current) |
+| **S3** | Stores JSON and Markdown reports — versioned, no public access |
+| **SNS** | Sends notifications and handles human approval (waitForTaskToken) |
+| **EventBridge** | Triggers the workflow every Monday at 8:00 UTC |
+| **IAM** | Least-privilege roles — Lambda and Step Functions have separate roles |
+| **CloudWatch** | Log groups for both Lambda functions (7-day retention) |
 
 ---
 
-## MCP SageMaker Integration
+## Infrastructure (Terraform)
 
-- **What:** AWS Labs official MCP server for SageMaker
-- **Install:** `uvx awslabs.sagemaker-ai-mcp-server@latest`
-- **Usage:** via Claude Code terminal with `claude` command
-- **Example queries:**
-  - "List all active SageMaker resources"
-  - "How much did SageMaker cost this month?"
-  - "Generate an optimization report"
+State is stored remotely in S3 with DynamoDB locking — never committed to git.
+
+```
+# Bootstrap (one-time, before terraform init)
+aws s3 mb s3://ml-cost-optimizer-tfstate --region eu-west-1
+aws s3api put-bucket-versioning \
+  --bucket ml-cost-optimizer-tfstate \
+  --versioning-configuration Status=Enabled
+aws dynamodb create-table \
+  --table-name ml-cost-optimizer-tflock \
+  --attribute-definitions AttributeName=LockID,AttributeType=S \
+  --key-schema AttributeName=LockID,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region eu-west-1
+
+# Deploy
+cd terraform
+terraform init
+terraform apply -var="notification_email=your@email.com"
+```
+
+---
+
+## CI/CD (GitHub Actions)
+
+Single workflow `ci.yml` — 5 jobs in sequence:
+
+```
+lint → test (coverage ≥ 80%) → build zip
+                ↓
+         security (checkov)
+                ↓
+         deploy (main only, OIDC auth)
+```
+
+- **OIDC authentication** — no AWS keys stored in GitHub secrets
+- **Lambda zip** includes all 3 Python files + dependencies installed via pip
+- **Checkov** scans Terraform for IaC security issues (soft fail — alerts only)
+- **Deploy** only triggers on push to main, never on PRs
 
 ---
 
 ## Security
 
-- IAM least-privilege (separate policies per action)
-- No credentials in code (GitHub Secrets + env vars)
-- S3 reports encrypted (SSE-AES256)
-- `action.py` executes only after explicit approval
+- IAM least-privilege — separate roles for Lambda and Step Functions
+- OIDC for CI/CD — no long-term AWS credentials in GitHub
+- No hardcoded ARNs or account IDs — all Terraform references
+- S3 reports: encrypted (SSE-AES256), versioned, public access blocked
+- `action.py` executes only after explicit human approval (waitForTaskToken)
 - All actions logged via Lambda Powertools (structured JSON)
+- pre-commit hooks: ruff (lint) + detect-secrets (secret scanning)
 
 ---
 
@@ -116,37 +153,28 @@ $env:AWS_ACCESS_KEY_ID="..."
 $env:AWS_SECRET_ACCESS_KEY="..."
 $env:AWS_DEFAULT_REGION="eu-west-1"
 
-# 2. Run locally
-cd lambda
-python discovery.py   # test scan
-python main.py        # test full analysis
+# 2. Install dependencies
+pip install -r requirements.txt -r requirements-dev.txt -r lambda/requirements.txt
 
-# 3. Deploy
-cd terraform
-terraform apply -var="notification_email=your@email.com"
+# 3. Run locally (mock mode — no real AWS calls)
+cd lambda
+python main.py
+
+# 4. Run tests
+pytest tests/ --cov=lambda --cov-fail-under=80 -v
 ```
 
 ---
 
-## What's still to do
+## Known limitations
 
-### Human approval before actions
-Right now, step 3 (Action) runs automatically in the workflow. The intent is that
-a human reviews the recommendations first and manually approves which action to
-take. A **Step Functions Wait for Callback** pattern with a task token needs to be
-wired in before the Action state.
+### Cost Explorer breakdown
+`get_real_costs()` gets the total SageMaker cost but distributes it across resource
+types using fixed percentages (25% notebooks, 35% training, etc.). Ideally this
+should use real Cost Explorer dimension grouping by usage type for accurate
+per-resource costs.
 
-### ✅ MCP integration
-AWS Labs SageMaker MCP server installed and working.
-
-### Carbon footprint reporting
-`calculate_carbon_footprint()` in `discovery.py` currently estimates CO2 per
-notebook based on instance type. This data is collected but not yet included in
-the S3 reports or the SNS notification. A dedicated CO2 section in the Markdown
-report is planned.
-
-### Real GroupBy in Cost Explorer
-`get_real_costs()` in `main.py` gets the total SageMaker cost but distributes it
-across resource types using fixed percentages (25% notebooks, 35% training, etc.).
-Ideally, this should use real Cost Explorer dimension grouping by usage type to get
-accurate per-resource costs.
+### Carbon footprint in reports
+`calculate_carbon_footprint()` collects CO2 estimates per notebook but this data
+is not yet included in the S3 reports or SNS notification. A dedicated section
+in the Markdown report is planned.

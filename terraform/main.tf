@@ -1,10 +1,31 @@
 terraform {
   required_version = ">= 1.0"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
+  }
+
+  # S3 backend — state stocké hors du repo, verrouillage via DynamoDB
+  # Créer le bucket et la table manuellement une seule fois avant terraform init :
+  #   aws s3 mb s3://ml-cost-optimizer-tfstate --region eu-west-1
+  #   aws s3api put-bucket-versioning --bucket ml-cost-optimizer-tfstate --versioning-configuration Status=Enabled
+  #   aws dynamodb create-table --table-name ml-cost-optimizer-tflock \
+  #     --attribute-definitions AttributeName=LockID,AttributeType=S \
+  #     --key-schema AttributeName=LockID,KeyType=HASH \
+  #     --billing-mode PAY_PER_REQUEST --region eu-west-1
+  backend "s3" {
+    bucket         = "ml-cost-optimizer-tfstate"
+    key            = "ml-cost-optimizer/terraform.tfstate"
+    region         = "eu-west-1"
+    encrypt        = true
+    dynamodb_table = "ml-cost-optimizer-tflock"
   }
 }
 
