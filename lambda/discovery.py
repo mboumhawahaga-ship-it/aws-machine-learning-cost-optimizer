@@ -92,6 +92,42 @@ def get_instance_hourly_price(instance_type, region="eu-west-1"):
         return default_prices.get(instance_type, 0.10)
 
 
+def scan_studio_apps():
+    """
+    Liste toutes les Studio Apps SageMaker actives (successeur des notebooks classiques).
+
+    Returns:
+        list: Liste des Studio Apps avec leur statut et domaine
+    """
+    sm = get_sagemaker_client()
+    apps = []
+
+    try:
+        paginator = sm.get_paginator("list_apps")
+        for page in paginator.paginate():
+            for app in page["Apps"]:
+                # InService = tourne et coûte de l'argent
+                if app["AppType"] in ("JupyterServer", "KernelGateway", "JupyterLab"):
+                    apps.append(
+                        {
+                            "name": app["AppName"],
+                            "type": app["AppType"],
+                            "domain_id": app.get("DomainId", ""),
+                            "user_profile": app.get("UserProfileName", ""),
+                            "status": app["Status"],
+                            "is_running": app["Status"] == "InService",
+                            "last_modified": str(app.get("LastHealthCheckTimestamp", "")),
+                        }
+                    )
+
+        logger.info(f"✅ {len(apps)} Studio apps trouvées")
+        return apps
+
+    except ClientError as e:
+        logger.error(f"❌ Erreur scan Studio apps : {e}")
+        return []
+
+
 def scan_notebooks():
     """
     Liste tous les notebooks SageMaker avec leur statut,
@@ -302,11 +338,12 @@ def run_discovery():
     logger.info("🔍 Démarrage du scan SageMaker...")
 
     notebooks = scan_notebooks()
+    studio_apps = scan_studio_apps()
     endpoints = scan_endpoints()
     training_jobs = scan_training_jobs()
 
-    # Ressources qui coûtent de l'argent en ce moment
     running_notebooks = [n for n in notebooks if n["is_running"]]
+    running_studio_apps = [a for a in studio_apps if a["is_running"]]
     running_endpoints = [e for e in endpoints if e["is_running"]]
 
     rapport = {
@@ -314,18 +351,23 @@ def run_discovery():
         "summary": {
             "total_notebooks": len(notebooks),
             "running_notebooks": len(running_notebooks),
+            "total_studio_apps": len(studio_apps),
+            "running_studio_apps": len(running_studio_apps),
             "total_endpoints": len(endpoints),
             "running_endpoints": len(running_endpoints),
             "total_training_jobs": len(training_jobs),
         },
         "notebooks": notebooks,
+        "studio_apps": studio_apps,
         "endpoints": endpoints,
         "training_jobs": training_jobs,
         "rgpd_compliance": _build_rgpd_compliance(notebooks, endpoints),
     }
 
     logger.info(
-        f"📊 Scan terminé : {len(running_notebooks)} notebooks actifs, {len(running_endpoints)} endpoints actifs"
+        f"📊 Scan terminé : {len(running_notebooks)} notebooks, "
+        f"{len(running_studio_apps)} Studio apps, "
+        f"{len(running_endpoints)} endpoints actifs"
     )
     return rapport
 
