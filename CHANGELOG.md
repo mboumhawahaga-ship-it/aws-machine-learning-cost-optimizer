@@ -93,7 +93,7 @@ La majorité des erreurs venaient de la différence entre l'environnement local 
 
 ## À faire
 
-- [ ] **RGPD visible** — les résultats existent mais n'apparaissent pas dans le mail ni le rapport
+- [x] **RGPD visible** — section dans le rapport Markdown + risque global dans la notification SNS
 - [ ] **EU AI Act** — détecter les modèles sans supervision humaine déclarée (différenciateur portfolio)
 - [ ] **Notebooks idle** — utiliser CloudWatch CPU pour distinguer "tourne" vs "tourne sans personne"
 - [ ] **Tests discovery + action** — ces deux fichiers ne sont pas couverts, le CI peut manquer une régression
