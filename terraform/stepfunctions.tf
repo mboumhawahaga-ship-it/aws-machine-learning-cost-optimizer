@@ -37,7 +37,7 @@ resource "aws_sfn_state_machine" "ml_cost_optimizer_workflow" {
         Resource = "arn:aws:states:::sns:publish.waitForTaskToken"
         Arguments = {
           TopicArn = "${aws_sns_topic.cost_analysis_notifications.arn}"
-          Message  = "{% 'Rapport ML Cost disponible. Approuvez les actions : ' & $states.taskToken %}"
+          Message  = "{% 'Rapport ML Cost disponible. Token approbation : ' & $states.context.Task.Token %}"
         }
         Next = "Action"
       }
