@@ -94,7 +94,7 @@ La majorité des erreurs venaient de la différence entre l'environnement local 
 ## À faire
 
 - [x] **RGPD visible** — section dans le rapport Markdown + risque global dans la notification SNS
-- [ ] **EU AI Act** — détecter les modèles sans supervision humaine déclarée (différenciateur portfolio)
+- [x] **EU AI Act** — détection `ai-risk-level` + alerte si `human-oversight` absent sur modèle haut risque
 - [ ] **Notebooks idle** — utiliser CloudWatch CPU pour distinguer "tourne" vs "tourne sans personne"
 - [ ] **Tests discovery + action** — ces deux fichiers ne sont pas couverts, le CI peut manquer une régression
 - [ ] **README humain** — ajouter pourquoi ce projet existe et ce que ça a appris à construire
