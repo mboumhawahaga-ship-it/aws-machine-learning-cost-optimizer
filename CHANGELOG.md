@@ -95,7 +95,8 @@ La majorité des erreurs venaient de la différence entre l'environnement local 
 
 - [x] **RGPD visible** — section dans le rapport Markdown + risque global dans la notification SNS
 - [x] **EU AI Act** — détection `ai-risk-level` + alerte si `human-oversight` absent sur modèle haut risque
-- [x] **Notebooks idle** — CloudWatch CPU < 5% sur 24h → recommandation passe à Critical
+- [x] **Notebooks idle** — CloudWatch CPU < 5% sur 24h → recommandation Critical
+- [x] **Endpoints idle** — CloudWatch Invocations = 0 sur 24h → recommandation Critical
 - [x] **Tests discovery + action** — 63 tests, coverage 87% (action 98%, discovery 86%, main 85%)
 - [x] **README humain** — ajout pourquoi ce projet, problèmes résolus, choix d'architecture
 - [ ] **Cost Explorer réel** — remplacer les pourcentages fixes par de vraies données (attendre 24h d'activation)
