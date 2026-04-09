@@ -97,7 +97,7 @@ def get_optimization_issue(resource_type):
     return issues.get(resource_type, "Review resource configuration")
 
 
-def generate_markdown_report(total_cost, total_savings, savings_pct, recs, report_date):
+def generate_markdown_report(total_cost, total_savings, savings_pct, recs, report_date, rgpd_data=None):
     """
     Génère un rapport Markdown avec résumé exécutif et recommandations.
 
@@ -149,6 +149,25 @@ def generate_markdown_report(total_cost, total_savings, savings_pct, recs, repor
         markdown += f"{idx}. **{rec['type']}** - {rec['issue']}\n"
         markdown += f"   - Potential Savings: ${rec['savings']:,.2f}/month\n"
         markdown += f"   - Effort: {rec['effort']} | Priority: {rec['priority']}\n\n"
+
+    # Section RGPD
+    if rgpd_data:
+        risk = rgpd_data.get("global_risk", "Unknown")
+        risk_emoji = {"Low": "✅", "Medium": "⚠️", "High": "🔴", "Unknown": "❓"}.get(risk, "❓")
+        markdown += f"\n---\n\n## GDPR Compliance\n\n"
+        markdown += f"**Global Risk Level: {risk_emoji} {risk}**\n\n"
+
+        all_resources = rgpd_data.get("notebooks", []) + rgpd_data.get("endpoints", [])
+        non_compliant = [r for r in all_resources if r["rgpd_risk"] != "Low"]
+
+        if non_compliant:
+            markdown += "| Resource | Type | Risk | Alerts |\n"
+            markdown += "|----------|------|------|--------|\n"
+            for r in non_compliant:
+                alerts = " / ".join(r["alerts"])
+                markdown += f"| {r['resource']} | {r['type']} | {r['rgpd_risk']} | {alerts} |\n"
+        else:
+            markdown += "All scanned resources have compliant GDPR tags.\n"
 
     return markdown
 
@@ -271,7 +290,7 @@ def save_markdown_report(bucket_name, markdown_content, report_date):
 
 
 def send_sns_notification(
-    sns_topic_arn, total_savings, savings_pct, recommendation_count, markdown_s3_url
+    sns_topic_arn, total_savings, savings_pct, recommendation_count, markdown_s3_url, rgpd_risk=None
 ):
     """
     Envoie une notification SNS avec un résumé des économies identifiées.
@@ -288,8 +307,11 @@ def send_sns_notification(
         message = (
             f"ML Cost Analysis — ${total_savings:,.2f} identified in savings "
             f"({savings_pct}%) across {recommendation_count} recommendations.\n\n"
-            f"Full report: {markdown_s3_url}"
         )
+        if rgpd_risk:
+            risk_emoji = {"Low": "✅", "Medium": "⚠️", "High": "🔴"}.get(rgpd_risk, "❓")
+            message += f"GDPR Risk: {risk_emoji} {rgpd_risk}\n\n"
+        message += f"Full report: {markdown_s3_url}"
 
         response = get_sns_client().publish(
             TopicArn=sns_topic_arn,
@@ -412,11 +434,14 @@ def handler(event, context):
         if mock_mode:
             logger.info("📊 Using mock data (MOCK_MODE=true)")
             data = MOCK_DATA
+            rgpd_data = None
         else:
             logger.info("📊 Fetching real costs from Cost Explorer...")
             data = get_real_costs()
             logger.info("🔍 Scanning real SageMaker resources...")
-            data["discovery"] = run_discovery()
+            discovery = run_discovery()
+            data["discovery"] = discovery
+            rgpd_data = discovery.get("rgpd_compliance")
 
         # Generate recommendations (sorted by ROI/Priority)
         recs = generate_recommendations(data["cost_by_resource"])
@@ -446,7 +471,7 @@ def handler(event, context):
 
             # 2. Generate and save Markdown report
             markdown_content = generate_markdown_report(
-                total_cost, total_savings, savings_pct, recs, report_date
+                total_cost, total_savings, savings_pct, recs, report_date, rgpd_data
             )
             markdown_url = save_markdown_report(
                 report_bucket, markdown_content, report_date
@@ -455,7 +480,8 @@ def handler(event, context):
             # 3. Send SNS notification (non-blocking - errors caught)
             if sns_topic_arn:
                 send_sns_notification(
-                    sns_topic_arn, total_savings, savings_pct, len(recs), markdown_url
+                    sns_topic_arn, total_savings, savings_pct, len(recs),
+                    markdown_url, rgpd_data.get("global_risk") if rgpd_data else None
                 )
             else:
                 logger.warning(
