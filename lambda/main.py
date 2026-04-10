@@ -25,6 +25,61 @@ def get_ce_client():
     return boto3.client("ce", region_name=os.environ.get("AWS_REGION", "eu-west-1"))
 
 
+def get_cloudwatch_client():
+    """Lazy-load CloudWatch client for custom metrics"""
+    return boto3.client("cloudwatch", region_name=os.environ.get("AWS_REGION", "eu-west-1"))
+
+
+def publish_metrics(total_savings, idle_notebooks_count, idle_endpoints_count, compliance_score):
+    """
+    Publie des métriques custom CloudWatch pour monitoring et alertes.
+
+    Métriques publiées dans le namespace MLCostOptimizer :
+      - SavingsIdentifiedUSD     : économies potentielles en dollars
+      - IdleNotebooksCount       : notebooks allumés sans activité (CPU < 5%)
+      - IdleEndpointsCount       : endpoints sans invocations sur 24h
+      - ComplianceScore          : % de ressources conformes RGPD (0-100)
+
+    Ces métriques permettent de créer des alarmes CloudWatch :
+      ex: alerter si IdleNotebooksCount > 0 ou ComplianceScore < 80
+    """
+    try:
+        get_cloudwatch_client().put_metric_data(
+            Namespace="MLCostOptimizer",
+            MetricData=[
+                {
+                    "MetricName": "SavingsIdentifiedUSD",
+                    "Value": float(total_savings),
+                    "Unit": "None",
+                },
+                {
+                    "MetricName": "IdleNotebooksCount",
+                    "Value": float(idle_notebooks_count),
+                    "Unit": "Count",
+                },
+                {
+                    "MetricName": "IdleEndpointsCount",
+                    "Value": float(idle_endpoints_count),
+                    "Unit": "Count",
+                },
+                {
+                    "MetricName": "ComplianceScore",
+                    "Value": float(compliance_score),
+                    "Unit": "Percent",
+                },
+            ],
+        )
+        logger.info(
+            f"✅ CloudWatch metrics published — "
+            f"savings=${total_savings:,.2f}, "
+            f"idle_notebooks={idle_notebooks_count}, "
+            f"idle_endpoints={idle_endpoints_count}, "
+            f"compliance={compliance_score}%"
+        )
+    except ClientError as e:
+        logger.warning(f"⚠️ CloudWatch metrics failed (non-blocking): {e}")
+
+
 # Données mock — utilisées quand MOCK_MODE=true
 MOCK_DATA = {
     "total_cost": 850.00,
@@ -662,6 +717,24 @@ def handler(event, context):
                 logger.warning(
                     "⚠️  Warning: SNS_TOPIC_ARN not configured, skipping notification"
                 )
+
+            # 4. Publish custom CloudWatch metrics
+            idle_notebooks = len([
+                n for n in (discovery or {}).get("notebooks", [])
+                if n.get("is_idle") and n.get("is_running")
+            ])
+            idle_endpoints = len([
+                e for e in (discovery or {}).get("endpoints", [])
+                if e.get("is_idle") and e.get("is_running")
+            ])
+            # Compliance score : % de ressources sans alerte RGPD High
+            all_rgpd = []
+            if rgpd_data:
+                all_rgpd = rgpd_data.get("notebooks", []) + rgpd_data.get("endpoints", [])
+            compliant_count = sum(1 for r in all_rgpd if r.get("rgpd_risk") == "Low")
+            compliance_score = round(compliant_count / len(all_rgpd) * 100) if all_rgpd else 100.0
+
+            publish_metrics(total_savings, idle_notebooks, idle_endpoints, compliance_score)
         else:
             logger.info("⏭️  Skipping S3 uploads and SNS in MOCK_MODE")
 

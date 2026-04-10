@@ -9,6 +9,11 @@
 **/__pycache__/
 *.pyc
 
+# Test coverage
+.coverage
+coverage.xml
+htmlcov/
+
 # OS files
 .DS_Store
 Thumbs.db

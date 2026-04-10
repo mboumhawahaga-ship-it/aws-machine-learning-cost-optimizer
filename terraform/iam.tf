@@ -74,7 +74,8 @@ resource "aws_iam_role_policy" "lambda_sagemaker_policy" {
         Sid    = "CloudWatchMetricsReadOnly"
         Effect = "Allow"
         Action = [
-          "cloudwatch:GetMetricStatistics"
+          "cloudwatch:GetMetricStatistics",
+          "cloudwatch:PutMetricData"
         ]
         Resource = "*"
       },
