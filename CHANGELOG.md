@@ -101,3 +101,14 @@ La majorité des erreurs venaient de la différence entre l'environnement local 
 - [x] **README humain** — ajout pourquoi ce projet, problèmes résolus, choix d'architecture
 - [ ] **Cost Explorer réel** — remplacer les pourcentages fixes par de vraies données (attendre 24h d'activation)
 - [ ] **CO2 dans les rapports** — les données sont collectées mais jamais affichées
+
+---
+
+## Décisions — ce qu'on a refusé et pourquoi
+
+| Proposition | Décision | Raison |
+|---|---|---|
+| Cache Pricing API DynamoDB | ❌ Refusé | 3 appels par scan — over-engineering sans valeur réelle |
+| DLQ SQS + retry | ❌ Refusé | Retry exponentiel déjà dans Step Functions — doubler c'est de la complexité pour rien |
+| TypedDict / dataclass | ❌ Refusé | Code lisible, projet solo — aucun gain concret maintenant |
+| Découper main.py | ❌ Refusé | 550 lignes raisonnables — découper casse 75 tests pour zéro gain |
