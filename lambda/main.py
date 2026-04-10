@@ -38,7 +38,100 @@ MOCK_DATA = {
 }
 
 
+def build_cost_from_discovery(discovery):
+    """
+    Calcule les coûts réels par type de ressource depuis les données discovery.
+    Utilisé quand Cost Explorer retourne $0 ou n'est pas disponible.
+    Les coûts sont calculés depuis les monthly_cost_estimate de chaque ressource
+    détectée via la Pricing API.
+
+    Returns:
+        dict: {"total_cost": float, "cost_by_resource": {...}}
+    """
+    notebooks_cost = sum(
+        n.get("monthly_cost_estimate", 0)
+        for n in discovery.get("notebooks", [])
+        if n.get("is_running")
+    )
+    endpoints_cost = sum(
+        e.get("monthly_cost_estimate", 0)
+        for e in discovery.get("endpoints", [])
+        if e.get("is_running")
+    )
+    total = round(notebooks_cost + endpoints_cost, 2)
+
+    return {
+        "total_cost": total,
+        "cost_by_resource": {
+            "notebooks": round(notebooks_cost, 2),
+            "training": 0.0,
+            "endpoints": round(endpoints_cost, 2),
+            "storage": 0.0,
+            "other": 0.0,
+        },
+    }
+
+
 def generate_recommendations(cost_by_resource, discovery=None):
+    """
+    Génère les recommandations d'économies pour chaque ressource SageMaker.
+    Si discovery est fourni, les notebooks idle (CPU < 5%) sont priorisés Critical.
+    """
+    recs = []
+
+    idle_notebooks = []
+    idle_endpoints = []
+    if discovery:
+        idle_notebooks = [
+            n for n in discovery.get("notebooks", [])
+            if n.get("is_idle") and n.get("is_running")
+        ]
+        idle_endpoints = [
+            e for e in discovery.get("endpoints", [])
+            if e.get("is_idle") and e.get("is_running")
+        ]
+
+    rules = [
+        ("notebooks", 0.75, "Notebooks", 20, "Low", "High"),
+        ("training", 0.70, "Training", 50, "Medium", "Critical"),
+        ("endpoints", 0.30, "Endpoints", 50, "Medium", "High"),
+        ("storage", 0.75, "Storage", 10, "Low", "Medium"),
+    ]
+
+    for key, pct, name, seuil, effort, priority in rules:
+        cost = cost_by_resource.get(key, 0)
+        if cost > seuil:
+            if name == "Notebooks" and idle_notebooks:
+                priority = "Critical"
+                issue = (
+                    f"Auto-stop {len(idle_notebooks)} idle notebook(s) "
+                    f"(avg CPU < 5% over 24h)"
+                )
+            elif name == "Endpoints" and idle_endpoints:
+                priority = "Critical"
+                issue = (
+                    f"Delete {len(idle_endpoints)} idle endpoint(s) "
+                    f"(0 invocations over 24h)"
+                )
+            else:
+                issue = get_optimization_issue(name)
+
+            recs.append(
+                {
+                    "type": name,
+                    "cost": cost,
+                    "savings": round(cost * pct, 2),
+                    "savings_pct": round(pct * 100),
+                    "effort": effort,
+                    "priority": priority,
+                    "issue": issue,
+                    "idle_count": len(idle_notebooks) if name == "Notebooks" else len(idle_endpoints) if name == "Endpoints" else 0,
+                }
+            )
+
+    priority_score = {"Critical": 1, "High": 2, "Medium": 3}
+    recs.sort(key=lambda x: (priority_score.get(x["priority"], 99), -x["savings"]))
+    return recs
     """
     Génère les recommandations d'économies pour chaque ressource SageMaker.
     Si discovery est fourni, les notebooks idle (CPU < 5%) sont priorisés Critical.
@@ -405,11 +498,17 @@ def get_real_costs():
 
         results = response.get("ResultsByTime", [])
         if not results:
-            logger.warning(
-                "⚠️ Cost Explorer : aucun résultat — le service peut nécessiter "
-                "jusqu'à 24h après activation. Fallback sur mock data."
+            logger.info(
+                "ℹ️ Cost Explorer : aucun résultat — pas encore de dépenses SageMaker ce mois-ci."
             )
-            return MOCK_DATA
+            return {
+                "total_cost": 0.0,
+                "cost_by_resource": {
+                    "notebooks": 0.0, "training": 0.0,
+                    "endpoints": 0.0, "storage": 0.0, "other": 0.0,
+                },
+                "cost_explorer_available": True,
+            }
 
         total_cost = sum(
             float(group["Metrics"]["UnblendedCost"]["Amount"])
@@ -418,11 +517,18 @@ def get_real_costs():
         )
 
         if total_cost == 0:
-            logger.warning(
-                "⚠️ Cost Explorer : coût total à $0 — données peut-être pas encore "
-                "disponibles (délai 24h). Fallback sur mock data."
+            logger.info(
+                "ℹ️ Cost Explorer : coût SageMaker = $0 ce mois-ci "
+                "(pas encore de dépenses ou délai 24h)."
             )
-            return MOCK_DATA
+            return {
+                "total_cost": 0.0,
+                "cost_by_resource": {
+                    "notebooks": 0.0, "training": 0.0,
+                    "endpoints": 0.0, "storage": 0.0, "other": 0.0,
+                },
+                "cost_explorer_available": True,
+            }
 
         # Répartition estimée par type de ressource (proportions SageMaker typiques)
         cost_by_resource = {
@@ -444,11 +550,18 @@ def get_real_costs():
         if error_code in ("DataUnavailableException", "RequestExpiredException"):
             logger.warning(
                 f"⚠️ Cost Explorer non disponible ({error_code}) — "
-                "données pas encore prêtes (délai 24h). Fallback sur mock data."
+                "données pas encore prêtes (délai 24h)."
             )
         else:
-            logger.error(f"❌ Erreur Cost Explorer : {e}. Fallback sur mock data.")
-        return MOCK_DATA
+            logger.error(f"❌ Erreur Cost Explorer : {e}.")
+        return {
+            "total_cost": 0.0,
+            "cost_by_resource": {
+                "notebooks": 0.0, "training": 0.0,
+                "endpoints": 0.0, "storage": 0.0, "other": 0.0,
+            },
+            "cost_explorer_available": False,
+        }
 
 
 def handler(event, context):
@@ -488,6 +601,19 @@ def handler(event, context):
             data["discovery"] = discovery
             rgpd_data = discovery.get("rgpd_compliance")
             eu_ai_act_data = discovery.get("eu_ai_act_compliance")
+
+            # Si Cost Explorer retourne $0, on calcule depuis les ressources réelles
+            if data["total_cost"] == 0.0:
+                real_costs = build_cost_from_discovery(discovery)
+                if real_costs["total_cost"] > 0:
+                    logger.info(
+                        f"📊 Coûts calculés depuis les ressources détectées : "
+                        f"${real_costs['total_cost']:,.2f}"
+                    )
+                    data["total_cost"] = real_costs["total_cost"]
+                    data["cost_by_resource"] = real_costs["cost_by_resource"]
+                else:
+                    logger.info("ℹ️ Aucune ressource SageMaker active détectée — coût réel = $0")
 
         # Generate recommendations (sorted by ROI/Priority)
         discovery = data.get("discovery")

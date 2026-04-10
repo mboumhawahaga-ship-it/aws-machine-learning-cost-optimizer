@@ -482,7 +482,8 @@ class TestGetRealCosts:
         ce.get_cost_and_usage.return_value = {"ResultsByTime": []}
         with mock.patch("main.get_ce_client", return_value=ce):
             result = main.get_real_costs()
-        assert result["total_cost"] == 850.0  # MOCK_DATA
+        assert result["total_cost"] == 0.0
+        assert result["cost_by_resource"]["notebooks"] == 0.0
 
     def test_fallback_si_cout_zero(self):
         import main
@@ -492,7 +493,7 @@ class TestGetRealCosts:
         ]}
         with mock.patch("main.get_ce_client", return_value=ce):
             result = main.get_real_costs()
-        assert result["total_cost"] == 850.0
+        assert result["total_cost"] == 0.0
 
     def test_retourne_vrais_couts(self):
         import main
@@ -514,7 +515,8 @@ class TestGetRealCosts:
         )
         with mock.patch("main.get_ce_client", return_value=ce):
             result = main.get_real_costs()
-        assert result["total_cost"] == 850.0
+        assert result["total_cost"] == 0.0
+        assert result["cost_explorer_available"] is False
 
 
 # ─────────────────────────────────────────────
