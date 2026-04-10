@@ -129,9 +129,27 @@ Checks endpoints serving ML models in production:
 
 ## Setup
 
-You need an AWS account and Terraform installed.
+### One-command install
 
-**1. Bootstrap remote state (one-time)**
+```bash
+git clone https://github.com/mboumhawahaga-ship-it/aws-machine-learning-cost-optimizer
+cd aws-machine-learning-cost-optimizer
+bash setup.sh
+```
+
+The script will:
+1. Check AWS CLI, Terraform, Python are installed
+2. Ask for your email address
+3. Create the S3 bucket + DynamoDB table for Terraform state
+4. Build the Lambda package
+5. Deploy everything with `terraform apply`
+6. Tell you to confirm the subscription email from AWS
+
+**Requirements:** AWS CLI configured (`aws configure`), Terraform, Python 3.12+
+
+### Manual setup
+
+If you prefer step by step:
 
 ```bash
 aws s3 mb s3://ml-cost-optimizer-tfstate --region eu-west-1
