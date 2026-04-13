@@ -6,6 +6,7 @@
 
 # Lambda
 **/function.zip
+**/package/
 **/__pycache__/
 *.pyc
 
@@ -52,4 +53,5 @@ IntelGraphicsProfiles/
 .gitconfig
 .ssh/
 output.json
+out.json
 sagemaker-optimization-report-*.md

@@ -37,7 +37,20 @@ resource "aws_sfn_state_machine" "ml_cost_optimizer_workflow" {
         Resource = "arn:aws:states:::sns:publish.waitForTaskToken"
         Arguments = {
           TopicArn = "${aws_sns_topic.cost_analysis_notifications.arn}"
-          Message  = "{% 'Rapport ML Cost disponible. Token approbation : ' & $states.context.Task.Token %}"
+          Subject  = "[ML Cost Optimizer] Approbation requise"
+          Message  = "{% 
+            '=== ML COST OPTIMIZER - RAPPORT HEBDOMADAIRE ===\n\n' &
+            '💰 Coût total SageMaker : $' & $string($states.input.body.total_cost) & '\n' &
+            '💸 Économies identifiées : $' & $string($states.input.body.potential_savings) & ' (' & $string($states.input.body.savings_pct) & '%)\n' &
+            '📋 Recommandations : ' & $string($states.input.body.recommendation_count) & '\n\n' &
+            '🔴 RESSOURCES IDLE À ARRÊTER :\n' &
+            '  Notebooks : ' & $join($states.input.body.idle_resources.notebooks, ', ') & '\n' &
+            '  Endpoints : ' & $join($states.input.body.idle_resources.endpoints, ', ') & '\n\n' &
+            '✅ Pour APPROUVER les actions, répondez avec : approved\n' &
+            '❌ Pour REFUSER, ignorez cet email (timeout 7 jours)\n\n' &
+            '📄 Rapport complet : ' & $states.input.body.reports.markdown_url & '\n\n' &
+            'Token (ne pas modifier) : ' & $states.context.Task.Token
+          %}"
         }
         Next = "Action"
       }
@@ -47,7 +60,10 @@ resource "aws_sfn_state_machine" "ml_cost_optimizer_workflow" {
         Output   = "{% $states.result.Payload %}"
         Arguments = {
           FunctionName = "${aws_lambda_function.cost_action.arn}:$LATEST"
-          Payload      = "{% $states.input %}"
+          Payload = {
+            approved       = "{% $states.input.approved %}"
+            idle_resources = "{% $states.input.idle_resources %}"
+          }
         }
         Retry = [
           {
@@ -69,8 +85,16 @@ resource "aws_sfn_state_machine" "ml_cost_optimizer_workflow" {
         Type     = "Task"
         Resource = "arn:aws:states:::sns:publish"
         Arguments = {
-          Message  = "{% $states.input %}"
           TopicArn = "${aws_sns_topic.cost_analysis_notifications.arn}"
+          Subject  = "[ML Cost Optimizer] Actions terminées"
+          Message  = "{% 
+            $states.input.body.approved = true ?
+              '=== ML COST OPTIMIZER - ACTIONS EFFECTUÉES ===\n\n' &
+              '✅ ' & $string($count($states.input.body.actions)) & ' action(s) exécutée(s) avec succès.\n\n' &
+              $join($states.input.body.actions.resource & ' → ' & $states.input.body.actions.action & ' (' & $states.input.body.actions.status & ')', '\n')
+            :
+              '=== ML COST OPTIMIZER - ACTIONS REFUSÉES ===\n\nAucune ressource nà été modifiée.'
+          %}"
         }
         End = true
       }

@@ -27,10 +27,14 @@ def get_ce_client():
 
 def get_cloudwatch_client():
     """Lazy-load CloudWatch client for custom metrics"""
-    return boto3.client("cloudwatch", region_name=os.environ.get("AWS_REGION", "eu-west-1"))
+    return boto3.client(
+        "cloudwatch", region_name=os.environ.get("AWS_REGION", "eu-west-1")
+    )
 
 
-def publish_metrics(total_savings, idle_notebooks_count, idle_endpoints_count, compliance_score):
+def publish_metrics(
+    total_savings, idle_notebooks_count, idle_endpoints_count, compliance_score
+):
     """
     Publie des métriques custom CloudWatch pour monitoring et alertes.
 
@@ -138,11 +142,13 @@ def generate_recommendations(cost_by_resource, discovery=None):
     idle_endpoints = []
     if discovery:
         idle_notebooks = [
-            n for n in discovery.get("notebooks", [])
+            n
+            for n in discovery.get("notebooks", [])
             if n.get("is_idle") and n.get("is_running")
         ]
         idle_endpoints = [
-            e for e in discovery.get("endpoints", [])
+            e
+            for e in discovery.get("endpoints", [])
             if e.get("is_idle") and e.get("is_running")
         ]
 
@@ -180,7 +186,11 @@ def generate_recommendations(cost_by_resource, discovery=None):
                     "effort": effort,
                     "priority": priority,
                     "issue": issue,
-                    "idle_count": len(idle_notebooks) if name == "Notebooks" else len(idle_endpoints) if name == "Endpoints" else 0,
+                    "idle_count": len(idle_notebooks)
+                    if name == "Notebooks"
+                    else len(idle_endpoints)
+                    if name == "Endpoints"
+                    else 0,
                 }
             )
 
@@ -198,11 +208,13 @@ def generate_recommendations(cost_by_resource, discovery=None):
     idle_endpoints = []
     if discovery:
         idle_notebooks = [
-            n for n in discovery.get("notebooks", [])
+            n
+            for n in discovery.get("notebooks", [])
             if n.get("is_idle") and n.get("is_running")
         ]
         idle_endpoints = [
-            e for e in discovery.get("endpoints", [])
+            e
+            for e in discovery.get("endpoints", [])
             if e.get("is_idle") and e.get("is_running")
         ]
 
@@ -241,7 +253,11 @@ def generate_recommendations(cost_by_resource, discovery=None):
                     "effort": effort,
                     "priority": priority,
                     "issue": issue,
-                    "idle_count": len(idle_notebooks) if name == "Notebooks" else len(idle_endpoints) if name == "Endpoints" else 0,
+                    "idle_count": len(idle_notebooks)
+                    if name == "Notebooks"
+                    else len(idle_endpoints)
+                    if name == "Endpoints"
+                    else 0,
                 }
             )
 
@@ -261,7 +277,15 @@ def get_optimization_issue(resource_type):
     return issues.get(resource_type, "Review resource configuration")
 
 
-def generate_markdown_report(total_cost, total_savings, savings_pct, recs, report_date, rgpd_data=None, eu_ai_act_data=None):
+def generate_markdown_report(
+    total_cost,
+    total_savings,
+    savings_pct,
+    recs,
+    report_date,
+    rgpd_data=None,
+    eu_ai_act_data=None,
+):
     """
     Génère un rapport Markdown avec résumé exécutif et recommandations.
 
@@ -317,8 +341,10 @@ def generate_markdown_report(total_cost, total_savings, savings_pct, recs, repor
     # Section RGPD
     if rgpd_data:
         risk = rgpd_data.get("global_risk", "Unknown")
-        risk_emoji = {"Low": "✅", "Medium": "⚠️", "High": "🔴", "Unknown": "❓"}.get(risk, "❓")
-        markdown += f"\n---\n\n## GDPR Compliance\n\n"
+        risk_emoji = {"Low": "✅", "Medium": "⚠️", "High": "🔴", "Unknown": "❓"}.get(
+            risk, "❓"
+        )
+        markdown += "\n---\n\n## GDPR Compliance\n\n"
         markdown += f"**Global Risk Level: {risk_emoji} {risk}**\n\n"
 
         all_resources = rgpd_data.get("notebooks", []) + rgpd_data.get("endpoints", [])
@@ -329,17 +355,24 @@ def generate_markdown_report(total_cost, total_savings, savings_pct, recs, repor
             markdown += "|----------|------|------|--------|\n"
             for r in non_compliant:
                 alerts = " / ".join(r["alerts"])
-                markdown += f"| {r['resource']} | {r['type']} | {r['rgpd_risk']} | {alerts} |\n"
+                markdown += (
+                    f"| {r['resource']} | {r['type']} | {r['rgpd_risk']} | {alerts} |\n"
+                )
         else:
             markdown += "All scanned resources have compliant GDPR tags.\n"
 
     # Section EU AI Act
     if eu_ai_act_data and eu_ai_act_data.get("endpoints"):
         status = eu_ai_act_data.get("global_status", "N/A")
-        status_emoji = {"Compliant": "✅", "Incomplete": "⚠️", "Non-Compliant": "🔴", "N/A": "—"}.get(status, "❓")
+        status_emoji = {
+            "Compliant": "✅",
+            "Incomplete": "⚠️",
+            "Non-Compliant": "🔴",
+            "N/A": "—",
+        }.get(status, "❓")
         high_risk = eu_ai_act_data.get("high_risk_count", 0)
 
-        markdown += f"\n---\n\n## EU AI Act Compliance\n\n"
+        markdown += "\n---\n\n## EU AI Act Compliance\n\n"
         markdown += f"**Global Status: {status_emoji} {status}**"
         if high_risk > 0:
             markdown += f" | **High-Risk Models: {high_risk}**"
@@ -477,7 +510,13 @@ def save_markdown_report(bucket_name, markdown_content, report_date):
 
 
 def send_sns_notification(
-    sns_topic_arn, total_savings, savings_pct, recommendation_count, markdown_s3_url, rgpd_risk=None, eu_ai_act_status=None
+    sns_topic_arn,
+    total_savings,
+    savings_pct,
+    recommendation_count,
+    markdown_s3_url,
+    rgpd_risk=None,
+    eu_ai_act_status=None,
 ):
     """
     Envoie une notification SNS avec un résumé des économies identifiées.
@@ -499,7 +538,11 @@ def send_sns_notification(
             risk_emoji = {"Low": "✅", "Medium": "⚠️", "High": "🔴"}.get(rgpd_risk, "❓")
             message += f"GDPR Risk: {risk_emoji} {rgpd_risk}\n"
         if eu_ai_act_status:
-            status_emoji = {"Compliant": "✅", "Incomplete": "⚠️", "Non-Compliant": "🔴"}.get(eu_ai_act_status, "❓")
+            status_emoji = {
+                "Compliant": "✅",
+                "Incomplete": "⚠️",
+                "Non-Compliant": "🔴",
+            }.get(eu_ai_act_status, "❓")
             message += f"EU AI Act: {status_emoji} {eu_ai_act_status}\n"
         if rgpd_risk or eu_ai_act_status:
             message += "\n"
@@ -559,8 +602,11 @@ def get_real_costs():
             return {
                 "total_cost": 0.0,
                 "cost_by_resource": {
-                    "notebooks": 0.0, "training": 0.0,
-                    "endpoints": 0.0, "storage": 0.0, "other": 0.0,
+                    "notebooks": 0.0,
+                    "training": 0.0,
+                    "endpoints": 0.0,
+                    "storage": 0.0,
+                    "other": 0.0,
                 },
                 "cost_explorer_available": True,
             }
@@ -579,8 +625,11 @@ def get_real_costs():
             return {
                 "total_cost": 0.0,
                 "cost_by_resource": {
-                    "notebooks": 0.0, "training": 0.0,
-                    "endpoints": 0.0, "storage": 0.0, "other": 0.0,
+                    "notebooks": 0.0,
+                    "training": 0.0,
+                    "endpoints": 0.0,
+                    "storage": 0.0,
+                    "other": 0.0,
                 },
                 "cost_explorer_available": True,
             }
@@ -612,8 +661,11 @@ def get_real_costs():
         return {
             "total_cost": 0.0,
             "cost_by_resource": {
-                "notebooks": 0.0, "training": 0.0,
-                "endpoints": 0.0, "storage": 0.0, "other": 0.0,
+                "notebooks": 0.0,
+                "training": 0.0,
+                "endpoints": 0.0,
+                "storage": 0.0,
+                "other": 0.0,
             },
             "cost_explorer_available": False,
         }
@@ -668,7 +720,9 @@ def handler(event, context):
                     data["total_cost"] = real_costs["total_cost"]
                     data["cost_by_resource"] = real_costs["cost_by_resource"]
                 else:
-                    logger.info("ℹ️ Aucune ressource SageMaker active détectée — coût réel = $0")
+                    logger.info(
+                        "ℹ️ Aucune ressource SageMaker active détectée — coût réel = $0"
+                    )
 
         # Generate recommendations (sorted by ROI/Priority)
         discovery = data.get("discovery")
@@ -699,7 +753,13 @@ def handler(event, context):
 
             # 2. Generate and save Markdown report
             markdown_content = generate_markdown_report(
-                total_cost, total_savings, savings_pct, recs, report_date, rgpd_data, eu_ai_act_data
+                total_cost,
+                total_savings,
+                savings_pct,
+                recs,
+                report_date,
+                rgpd_data,
+                eu_ai_act_data,
             )
             markdown_url = save_markdown_report(
                 report_bucket, markdown_content, report_date
@@ -708,7 +768,10 @@ def handler(event, context):
             # 3. Send SNS notification (non-blocking - errors caught)
             if sns_topic_arn:
                 send_sns_notification(
-                    sns_topic_arn, total_savings, savings_pct, len(recs),
+                    sns_topic_arn,
+                    total_savings,
+                    savings_pct,
+                    len(recs),
                     markdown_url,
                     rgpd_data.get("global_risk") if rgpd_data else None,
                     eu_ai_act_data.get("global_status") if eu_ai_act_data else None,
@@ -719,26 +782,50 @@ def handler(event, context):
                 )
 
             # 4. Publish custom CloudWatch metrics
-            idle_notebooks = len([
-                n for n in (discovery or {}).get("notebooks", [])
-                if n.get("is_idle") and n.get("is_running")
-            ])
-            idle_endpoints = len([
-                e for e in (discovery or {}).get("endpoints", [])
-                if e.get("is_idle") and e.get("is_running")
-            ])
+            idle_notebooks = len(
+                [
+                    n
+                    for n in (discovery or {}).get("notebooks", [])
+                    if n.get("is_idle") and n.get("is_running")
+                ]
+            )
+            idle_endpoints = len(
+                [
+                    e
+                    for e in (discovery or {}).get("endpoints", [])
+                    if e.get("is_idle") and e.get("is_running")
+                ]
+            )
             # Compliance score : % de ressources sans alerte RGPD High
             all_rgpd = []
             if rgpd_data:
-                all_rgpd = rgpd_data.get("notebooks", []) + rgpd_data.get("endpoints", [])
+                all_rgpd = rgpd_data.get("notebooks", []) + rgpd_data.get(
+                    "endpoints", []
+                )
             compliant_count = sum(1 for r in all_rgpd if r.get("rgpd_risk") == "Low")
-            compliance_score = round(compliant_count / len(all_rgpd) * 100) if all_rgpd else 100.0
+            compliance_score = (
+                round(compliant_count / len(all_rgpd) * 100) if all_rgpd else 100.0
+            )
 
-            publish_metrics(total_savings, idle_notebooks, idle_endpoints, compliance_score)
+            publish_metrics(
+                total_savings, idle_notebooks, idle_endpoints, compliance_score
+            )
         else:
             logger.info("⏭️  Skipping S3 uploads and SNS in MOCK_MODE")
 
         # Return success response
+        # Ressources idle à traiter par action.py
+        idle_notebooks_list = [
+            n["name"]
+            for n in (discovery or {}).get("notebooks", [])
+            if n.get("is_idle") and n.get("is_running")
+        ]
+        idle_endpoints_list = [
+            e["name"]
+            for e in (discovery or {}).get("endpoints", [])
+            if e.get("is_idle") and e.get("is_running")
+        ]
+
         response_data = {
             "success": True,
             "total_cost": total_cost,
@@ -746,6 +833,10 @@ def handler(event, context):
             "savings_pct": savings_pct,
             "recommendation_count": len(recs),
             "recommendations": recs,
+            "idle_resources": {
+                "notebooks": idle_notebooks_list,
+                "endpoints": idle_endpoints_list,
+            },
         }
 
         if json_url or markdown_url:

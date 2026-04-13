@@ -1,4 +1,4 @@
-# EventBridge Rule - Trigger Lambda weekly on Monday at 8 UTC
+# EventBridge Rule - Trigger Step Functions weekly on Monday at 8 UTC
 resource "aws_cloudwatch_event_rule" "ml_cost_analysis_schedule" {
   name                = "${var.project_name}-schedule"
   description         = "Trigger ML cost analysis every Monday at 8:00 UTC"
@@ -10,20 +10,10 @@ resource "aws_cloudwatch_event_rule" "ml_cost_analysis_schedule" {
   }
 }
 
-# EventBridge Target - Lambda function
-resource "aws_cloudwatch_event_target" "lambda_target" {
+# EventBridge Target → Step Functions
+resource "aws_cloudwatch_event_target" "sfn_target" {
   rule      = aws_cloudwatch_event_rule.ml_cost_analysis_schedule.name
-  target_id = "${var.project_name}-lambda-target"
-  arn       = aws_lambda_function.cost_analyzer.arn
-
-  depends_on = [aws_lambda_permission.allow_eventbridge]
-}
-
-# Lambda Permission - Allow EventBridge to invoke function
-resource "aws_lambda_permission" "allow_eventbridge" {
-  statement_id  = "AllowExecutionFromEventBridge"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.cost_analyzer.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.ml_cost_analysis_schedule.arn
+  target_id = "${var.project_name}-sfn-target"
+  arn       = aws_sfn_state_machine.ml_cost_optimizer_workflow.arn
+  role_arn  = aws_iam_role.eventbridge_sfn_role.arn
 }

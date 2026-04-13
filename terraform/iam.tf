@@ -34,6 +34,8 @@ resource "aws_iam_role_policy" "sfn_policy" {
         Effect = "Allow"
         Action = ["lambda:InvokeFunction"]
         Resource = [
+          "${aws_lambda_function.cost_analyzer.arn}:*",
+          "${aws_lambda_function.cost_action.arn}:*",
           aws_lambda_function.cost_analyzer.arn,
           aws_lambda_function.cost_action.arn
         ]
@@ -45,6 +47,39 @@ resource "aws_iam_role_policy" "sfn_policy" {
         Resource = aws_sns_topic.cost_analysis_notifications.arn
       }
     ]
+  })
+}
+
+# IAM Role pour EventBridge → Step Functions
+resource "aws_iam_role" "eventbridge_sfn_role" {
+  name = "${var.project_name}-eventbridge-sfn-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "events.amazonaws.com" }
+    }]
+  })
+
+  tags = {
+    Project   = var.project_name
+    ManagedBy = "Terraform"
+  }
+}
+
+resource "aws_iam_role_policy" "eventbridge_sfn_policy" {
+  name = "${var.project_name}-eventbridge-sfn-policy"
+  role = aws_iam_role.eventbridge_sfn_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "states:StartExecution"
+      Resource = aws_sfn_state_machine.ml_cost_optimizer_workflow.arn
+    }]
   })
 }
 

@@ -85,35 +85,52 @@ def delete_endpoint(endpoint_name):
 
 def handler(event, context):
     """
-    Point d'entrée Lambda — exécute une action sur une ressource SageMaker.
+    Point d'entrée Lambda — exécute les actions uniquement si approuvé.
 
     Event attendu :
         {
-            "action_type": "stop_notebook" | "delete_endpoint",
-            "resource_name": "<nom de la ressource>"
+            "approved": true | false,
+            "idle_resources": {
+                "notebooks": ["notebook-1"],
+                "endpoints": ["endpoint-1"]
+            }
         }
     """
     logger.info("🚀 Action Lambda - Démarrage")
 
     try:
-        action_type = event.get("action_type")
-        resource_name = event.get("resource_name")
+        approved = event.get("approved", False)
+        idle_resources = event.get("idle_resources", {})
+        notebooks = idle_resources.get("notebooks", [])
+        endpoints = idle_resources.get("endpoints", [])
 
-        if not action_type or not resource_name:
-            raise ValueError(
-                "Les champs 'action_type' et 'resource_name' sont obligatoires"
-            )
+        if not approved:
+            logger.info("❌ Action refusée par l'humain — aucune ressource touchée")
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"success": True, "approved": False, "actions": []}),
+            }
 
-        if action_type == "stop_notebook":
-            result = stop_notebook(resource_name)
-        elif action_type == "delete_endpoint":
-            result = delete_endpoint(resource_name)
-        else:
-            raise ValueError(
-                f"action_type inconnu : '{action_type}'. Valeurs acceptées : stop_notebook, delete_endpoint"
-            )
+        if not notebooks and not endpoints:
+            logger.info("ℹ️ Aucune ressource idle à traiter")
+            return {
+                "statusCode": 200,
+                "body": json.dumps({"success": True, "approved": True, "actions": []}),
+            }
 
-        return {"statusCode": 200, "body": json.dumps(result)}
+        results = []
+        for name in notebooks:
+            results.append(stop_notebook(name))
+        for name in endpoints:
+            results.append(delete_endpoint(name))
+
+        success_count = sum(1 for r in results if r["status"] == "success")
+        logger.info(f"✅ {success_count}/{len(results)} actions réussies")
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps({"success": True, "approved": True, "actions": results}),
+        }
 
     except Exception as e:
         logger.error(f"❌ Erreur fatale : {e}")
